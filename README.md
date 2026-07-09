@@ -9,6 +9,8 @@
 
 将 Markdown 转换为符合学术规范的 Word 文档的Agent Skill，支持三线表、图题/表题自动编号、页码、页眉等学术论文排版规范。
 
+![MD与DOCX生成效果](./examples/demo.png)
+
 ## 安装
 
 ### 通过 Git 安装（推荐）
