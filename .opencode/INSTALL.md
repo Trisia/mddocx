@@ -7,7 +7,7 @@
 ```json
 {
   "plugins": [
-    "git:https://github.com/YOUR_USERNAME/mddocx"
+    "git:https://github.com/Trisia/mddocx"
   ]
 }
 ```
