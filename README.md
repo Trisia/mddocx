@@ -8,6 +8,7 @@
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue?logo=python)](https://python.org)
 [![CI](https://github.com/Trisia/mddocx/actions/workflows/release.yml/badge.svg)](https://github.com/Trisia/mddocx/actions/workflows/release.yml)
 [![Clawhub](https://img.shields.io/badge/Clawhub-mddocx-8b5cf6)](https://clawhub.ai/Trisia/mddoc)
+[![npm](https://img.shields.io/npm/v/mddocx)](https://www.npmjs.com/package/mddocx)
 
 将 Markdown 转换为符合学术规范的 Word 文档的Agent Skill，支持三线表、图题/表题自动编号、页码、页眉等学术论文排版规范。
 
@@ -42,6 +43,14 @@ pip install python-docx Pillow requests mistune
 ```
 
 ## 使用
+
+### npx（无需安装）
+
+```bash
+npx mddocx paper.md                    # 转换文件
+npx mddocx paper.md -o output.docx     # 指定输出
+npx mddocx --text "# 标题" -o out.docx # 转换文本
+```
 
 ### Claude Code 中
 

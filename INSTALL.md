@@ -4,6 +4,22 @@
 
 ---
 
+## npm（推荐命令行用户）
+
+```bash
+npm install -g mddocx        # 全局安装
+npx mddocx paper.md          # 或直接 npx 运行（无需安装）
+```
+
+发布：
+
+```bash
+npm login
+npm publish --access public
+```
+
+---
+
 ## Claude Code
 
 ```copy
