@@ -1,0 +1,38 @@
+name: Release
+
+on:
+  push:
+    tags: [ 'v*' ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install python-docx Pillow requests mistune
+
+      - name: Smoke test — convert demo
+        run: python skills/mddoc/scripts/md2docx.py examples/demo.md -o /tmp/test.docx
+
+      - name: Package skill (.skill)
+        run: cd skills && zip -r ../mddoc.skill mddoc/
+
+      - name: Package source
+        run: zip -r mddocx.zip . -x ".git/*" "__pycache__/*" ".venv/*"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            mddoc.skill
+            mddocx.zip
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -6,6 +6,7 @@
 [![Version](https://img.shields.io/github/v/release/Trisia/mddocx)](https://github.com/Trisia/mddocx/releases)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue?logo=python)](https://python.org)
+[![CI](https://github.com/Trisia/mddocx/actions/workflows/release.yml/badge.svg)](https://github.com/Trisia/mddocx/actions/workflows/release.yml)
 
 将 Markdown 转换为符合学术规范的 Word 文档的Agent Skill，支持三线表、图题/表题自动编号、页码、页眉等学术论文排版规范。
 
@@ -43,10 +44,15 @@ git clone https://github.com/Trisia/mddocx ~/.claude/plugins/mddocx
 
 详见 [.opencode/INSTALL.md](.opencode/INSTALL.md)
 
-### 直接复制
+### 仅安装技能（轻量）
+
+不安装插件 hook，仅复制技能文件：
 
 ```bash
-cp -r ~/project/mddocx/skills/mddoc ~/.claude/skills/mddoc
+git clone https://github.com/Trisia/mddocx /tmp/mddocx
+mkdir -p ~/.claude/skills/mddoc
+cp -r /tmp/mddocx/skills/mddoc/* ~/.claude/skills/mddoc/
+rm -rf /tmp/mddocx
 ```
 
 ### 依赖安装
