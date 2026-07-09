@@ -11,6 +11,22 @@
 
 将 Markdown 转换为符合学术规范的 Word 文档的Agent Skill，支持三线表、图题/表题自动编号、页码、页眉等学术论文排版规范。
 
+```copy
+请帮我安装 mddocx 插件：
+
+1. 执行命令安装：
+git clone https://github.com/Trisia/mddocx /tmp/mddocx
+mkdir -p ~/.claude/skills/mddoc
+cp -r /tmp/mddocx/skills/mddoc/* ~/.claude/skills/mddoc/
+rm -rf /tmp/mddocx
+
+2. 安装 Python 依赖：
+python3 -m venv ~/.claude/venvs/mddocx
+~/.claude/venvs/mddocx/bin/pip install python-docx Pillow requests mistune
+```
+
+> 👆 复制上面代码块，粘贴给 Claude Code 即可自动完成安装
+
 ![MD与DOCX生成效果](./examples/demo.png)
 
 ## 安装
