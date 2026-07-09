@@ -11,83 +11,35 @@
 
 将 Markdown 转换为符合学术规范的 Word 文档的Agent Skill，支持三线表、图题/表题自动编号、页码、页眉等学术论文排版规范。
 
-```copy
-请帮我安装 mddocx 插件：
-
-1. 执行命令安装：
-git clone https://github.com/Trisia/mddocx /tmp/mddocx
-mkdir -p ~/.claude/skills/mddoc
-cp -r /tmp/mddocx/skills/mddoc/* ~/.claude/skills/mddoc/
-rm -rf /tmp/mddocx
-
-2. 安装 Python 依赖：
-python3 -m venv ~/.claude/venvs/mddocx
-~/.claude/venvs/mddocx/bin/pip install python-docx Pillow requests mistune
-```
-
-> 👆 复制上面代码块，粘贴给 Claude Code 即可自动完成安装
-
 ![MD与DOCX生成效果](./examples/demo.png)
 
 ## 安装
 
-### 通过 Git 安装（推荐）
+### 🤖 一键安装
 
-```bash
-# 克隆到本地
-git clone https://github.com/Trisia/mddocx ~/.claude/plugins/mddocx
+复制粘贴给任意智能体即可安装：
 
-# 在 Claude Code 中安装
-/plugin install ~/.claude/plugins/mddocx
-```
+```copy
+请帮我安装 mddocx 插件：
 
-### Codex (OpenAI)
-
-在 Codex 中安装：
-
-```bash
-/plugin install git:https://github.com/Trisia/mddocx
-```
-
-### OpenCode
-
-在 `opencode.json` 中添加插件：
-
-```json
-{
-  "plugins": ["git:https://github.com/Trisia/mddocx"]
-}
-```
-
-详见 [.opencode/INSTALL.md](.opencode/INSTALL.md)
-
-### 仅安装技能（轻量）
-
-不安装插件 hook，仅复制技能文件：
-
-```bash
 git clone https://github.com/Trisia/mddocx /tmp/mddocx
 mkdir -p ~/.claude/skills/mddoc
 cp -r /tmp/mddocx/skills/mddoc/* ~/.claude/skills/mddoc/
 rm -rf /tmp/mddocx
 
-# 安装 Python 依赖（推荐用虚拟环境）
 python3 -m venv ~/.claude/venvs/mddocx
 ~/.claude/venvs/mddocx/bin/pip install python-docx Pillow requests mistune
 ```
 
-### 依赖安装
+### 📖 完整安装指南
+
+支持 **Claude Code** / **Codex** / **OpenCode** / **Cursor** / **通用** 等多种方式，详见 **[INSTALL.md](INSTALL.md)**。
+
+### 依赖
 
 ```bash
-# 推荐在虚拟环境中安装
-python3 -m venv .venv
-source .venv/bin/activate  # Linux/macOS
-# .venv\Scripts\activate   # Windows
-
 pip install python-docx Pillow requests mistune
 ```
-
-> 若系统提示 `externally-managed-environment`，请使用虚拟环境或添加 `--break-system-packages` 参数。
 
 ## 使用
 
