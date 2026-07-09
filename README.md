@@ -1,7 +1,5 @@
 # mddocx — Markdown 转学术格式 DOCX
 
-将 Markdown 转换为符合学术规范的 Word 文档的Agent Skill，支持三线表、图题/表题自动编号、页码、页眉等学术论文排版规范。
-
 [![Claude Code](https://img.shields.io/badge/Agent-Claude%20Code-orange?logo=claude)](https://claude.com/code)
 [![Codex](https://img.shields.io/badge/Agent-Codex-blue?logo=openai)](https://github.com/openai/codex)
 [![OpenCode](https://img.shields.io/badge/Agent-OpenCode-teal)](https://opencode.ai)
@@ -9,7 +7,7 @@
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue?logo=python)](https://python.org)
 
-![Markdown → DOCX 对比](assets/comparison.png)
+将 Markdown 转换为符合学术规范的 Word 文档的Agent Skill，支持三线表、图题/表题自动编号、页码、页眉等学术论文排版规范。
 
 ## 安装
 
