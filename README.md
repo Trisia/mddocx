@@ -7,6 +7,7 @@
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue?logo=python)](https://python.org)
 [![CI](https://github.com/Trisia/mddocx/actions/workflows/release.yml/badge.svg)](https://github.com/Trisia/mddocx/actions/workflows/release.yml)
+[![Clawhub](https://img.shields.io/badge/Clawhub-mddocx-8b5cf6)](https://clawhub.ai/Trisia/mddoc)
 
 将 Markdown 转换为符合学术规范的 Word 文档的Agent Skill，支持三线表、图题/表题自动编号、页码、页眉等学术论文排版规范。
 
