@@ -1,0 +1,12 @@
+{
+  "name": "mddocx",
+  "version": "1.0.0",
+  "description": "Markdown 转学术格式 DOCX — Claude Code 插件",
+  "type": "module",
+  "keywords": ["markdown", "docx", "academic", "claude-code", "skill"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/superluckykoo/mddocx"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,10 @@
+.worktrees/
+.claude/
+.superpowers/
+__pycache__/
+*.pyc
+.venv/
+.DS_Store
+node_modules/
+# Skill evals are part of the project — do NOT ignore
+# evals/

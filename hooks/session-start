@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# mddocx session-start hook — 在每个会话开始时注入 mddoc 技能
+# 参考 superpowers hooks/session-start 实现
+
+set -euo pipefail
+
+SKILL_DIR="${CLAUDE_PLUGIN_ROOT:-$(dirname "$(dirname "$0")")}"
+SKILL_MD="$SKILL_DIR/skills/mddoc/SKILL.md"
+
+if [ ! -f "$SKILL_MD" ]; then
+  echo '{"additionalContext":"[mddocx] mddoc skill not found at '"$SKILL_MD"'"}'
+  exit 0
+fi
+
+# 读取 SKILL.md 内容
+CONTENT=$(cat "$SKILL_MD")
+
+# 构建注入内容
+INJECT="<EXTREMELY_IMPORTANT>
+本会话已安装 mddocx 插件。以下是 mddoc 技能——当用户要求将 Markdown 转换为 Word 文档时自动触发。
+
+$CONTENT
+</EXTREMELY_IMPORTANT>"
+
+# 输出为 JSON（Claude Code SessionStart 格式）
+python3 -c "
+import json, sys
+print(json.dumps({'additionalContext': open('$SKILL_MD').read()}))
+"
