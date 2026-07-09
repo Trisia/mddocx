@@ -54,13 +54,24 @@ git clone https://github.com/Trisia/mddocx /tmp/mddocx
 mkdir -p ~/.claude/skills/mddoc
 cp -r /tmp/mddocx/skills/mddoc/* ~/.claude/skills/mddoc/
 rm -rf /tmp/mddocx
+
+# 安装 Python 依赖（推荐用虚拟环境）
+python3 -m venv ~/.claude/venvs/mddocx
+~/.claude/venvs/mddocx/bin/pip install python-docx Pillow requests mistune
 ```
 
 ### 依赖安装
 
 ```bash
+# 推荐在虚拟环境中安装
+python3 -m venv .venv
+source .venv/bin/activate  # Linux/macOS
+# .venv\Scripts\activate   # Windows
+
 pip install python-docx Pillow requests mistune
 ```
+
+> 若系统提示 `externally-managed-environment`，请使用虚拟环境或添加 `--break-system-packages` 参数。
 
 ## 使用
 
