@@ -16,6 +16,26 @@ git clone https://github.com/superluckykoo/mddocx.git ~/.claude/plugins/mddocx
 /plugin install ~/.claude/plugins/mddocx
 ```
 
+### Codex (OpenAI)
+
+在 Codex 中安装：
+
+```bash
+/plugin install git:https://github.com/YOUR_USERNAME/mddocx
+```
+
+### OpenCode
+
+在 `opencode.json` 中添加插件：
+
+```json
+{
+  "plugins": ["git:https://github.com/YOUR_USERNAME/mddocx"]
+}
+```
+
+详见 [.opencode/INSTALL.md](.opencode/INSTALL.md)
+
 ### 直接复制
 
 ```bash

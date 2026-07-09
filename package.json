@@ -1,12 +1,13 @@
 {
   "name": "mddocx",
   "version": "1.0.0",
-  "description": "Markdown 转学术格式 DOCX — Claude Code 插件",
+  "description": "Markdown 转学术格式 DOCX",
   "type": "module",
-  "keywords": ["markdown", "docx", "academic", "claude-code", "skill"],
+  "main": ".opencode/plugins/mddocx.js",
+  "keywords": ["markdown", "docx", "academic", "claude-code", "codex", "opencode", "skill"],
   "repository": {
     "type": "git",
-    "url": "https://github.com/superluckykoo/mddocx"
+    "url": "https://github.com/YOUR_USERNAME/mddocx"
   },
   "license": "MIT"
 }
