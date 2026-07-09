@@ -4,21 +4,6 @@
 
 ---
 
-## npm（推荐命令行用户）
-
-```bash
-npm install -g mddocx        # 全局安装
-npx mddocx paper.md          # 或直接 npx 运行（无需安装）
-```
-
-发布：
-
-```bash
-npm login
-npm publish --access public
-```
-
----
 
 ## Claude Code
 
@@ -101,6 +86,16 @@ git clone https://github.com/Trisia/mddocx /tmp/mddocx
 mkdir -p ~/.cursor/skills/mddoc
 cp -r /tmp/mddocx/skills/mddoc/* ~/.cursor/skills/mddoc/
 rm -rf /tmp/mddocx
+pip install python-docx Pillow requests mistune
+```
+
+手动安装：
+
+```bash
+# 克隆仓库
+git clone https://github.com/Trisia/mddocx ~/.cursor/plugins/mddocx
+
+# 安装 Python 依赖
 pip install python-docx Pillow requests mistune
 ```
 

@@ -75,10 +75,17 @@ def set_outline(para, level):
 
 ### 基础设置
 
-五号=10.5pt，1.3倍行距，段前段后0磅，全黑，A4默认边距，不添加额外参数。
+五号=10.5pt，1.3倍行距，段前段后0磅，全黑，A4页边距左3cm右2cm上2cm下2cm，页脚距底1cm。
 
 ```python
 doc = Document()
+section = doc.sections[0]
+# 页边距：左3cm 右2cm 上2cm 下2cm
+section.left_margin = Cm(3)
+section.right_margin = Cm(2)
+section.top_margin = Cm(2)
+section.bottom_margin = Cm(2)
+
 sty = doc.styles['Normal']
 sty.font.size = Pt(10.5)
 sty.font.name = 'Times New Roman'
@@ -309,9 +316,83 @@ run = p.add_run(code)
 set_cn_font(run, '宋体', en_name='Courier New', size_pt=10.5)
 ```
 
+### 行内公式（`$...$`）
+
+嵌于段落中，转换为 OMML（Office Math Markup Language）格式，WPS/Word 可直接渲染。
+公式在段落中作为 `<m:oMath>` 元素插入，与文字 run 同级。
+
+```python
+# 行内公式通过 split_inline_math() 拆分为 segments
+# text segment → 普通 run，math segment → latex_to_omml() → m:oMath 元素
+p = doc.add_paragraph()
+p.paragraph_format.first_line_indent = Pt(21)
+p.paragraph_format.line_spacing = 1.3
+for seg in segments:
+    if seg['type'] == 'text':
+        if seg['content']:
+            run = p.add_run(seg['content'])
+            set_cn_font(run, '宋体', size_pt=10.5)
+    else:  # math — 转换为 OMML 并插入段落 XML
+        omml = latex_to_omml(seg['content'], display=False)
+        p._element.append(omml)
+```
+
+### 行间公式（`$$...$$`）
+
+独立成行，上下各空一行。公式通过 OMML 居中渲染，编号右对齐。编号格式同图/表：`(章-序号)`，逐章编号。编号括号用五号宋体，数字用五号 Times New Roman。
+
+布局方式：段落设置居中和右对齐 tab stop，OMML `<m:oMath>` 元素位于两个 tab 之间，实现公式居中、编号右对齐。
+
+```python
+add_empty(doc)  # 上方空一行
+p = doc.add_paragraph()
+
+# 设置 tab stops：居中和右对齐
+# 左边距3cm右边距2cm → 可用宽度16cm → 中心8cm(4536twips), 右边16cm(9072twips)
+pPr = p._element.get_or_add_pPr()
+tabs = OxmlElement('w:tabs')
+ct = OxmlElement('w:tab'); ct.set(qn('w:val'), 'center'); ct.set(qn('w:pos'), '4536')
+rt = OxmlElement('w:tab'); rt.set(qn('w:val'), 'right'); rt.set(qn('w:pos'), '9072')
+tabs.append(ct); tabs.append(rt)
+pPr.append(tabs)
+
+# tab → 公式 OMML 居中
+run_t1 = p.add_run()
+run_t1._r.append(OxmlElement('w:tab'))
+omml = latex_to_omml(formula_text, display=False)
+p._element.append(omml)
+
+# tab → 编号右对齐：(章-序号)
+run_t2 = p.add_run()
+run_t2._r.append(OxmlElement('w:tab'))
+run_lp = p.add_run('(')
+set_cn_font(run_lp, '宋体', en_name='宋体', size_pt=10.5)
+run_num = p.add_run(f'{ch}-{eq_num}')
+set_cn_font(run_num, '宋体', en_name='Times New Roman', size_pt=10.5)
+run_rp = p.add_run(')')
+set_cn_font(run_rp, '宋体', en_name='宋体', size_pt=10.5)
+
+add_empty(doc)  # 下方空一行
+```
+
+### LaTeX → OMML 转换
+
+内置 `latex_to_omml()` 函数将 LaTeX 数学公式转换为 OMML XML，支持以下构造：
+
+- 上下标：`a^b`、`a_b`、`a_b^c`
+- 分数：`\frac{a}{b}`
+- 根式：`\sqrt{x}`、`\sqrt[n]{x}`
+- 希腊字母：`\alpha`、`\beta`、`\Gamma` 等
+- 大运算符：`\sum`、`\prod`、`\int`（含上下限）
+- 函数名：`\sin`、`\cos`、`\log`、`\lim` 等
+- 重音：`\hat`、`\bar`、`\vec`、`\tilde` 等
+- 符号：`\infty`、`\cdot`、`\times`、`\partial`、`\nabla` 等
+- 定界符：`\left(...\right)`、`\left[...\right]`
+- 文本：`\text{...}`
+
 ### 页码
 
-从第一章（第一个一级标题所在页）开始编页码，格式 `第×页  共×页`，页脚边距 1.1cm。
+从第一章（第一个一级标题所在页）开始编页码，格式 `第×页  共×页`，页脚边距 1cm。
 
 ```python
 from docx.oxml import OxmlElement
@@ -392,8 +473,11 @@ set_cn_font(run_cont, '宋体', size_pt=10.5)
 - [ ] 表题：10.5pt宋体加粗居中、表格上方
 - [ ] 列表：有序用（1）（2）（3）、无序用•、首行缩进
 - [ ] 页眉：左"xxxxx"右题目、9pt黑体
-- [ ] 页码："第×页 共×页"、页脚边距1.1cm
+- [ ] 行内公式：$...$ 嵌于段落、OMML格式、WPS/Word可渲染
+- [ ] 行间公式：$$...$$ OMML居中、上下各空一行、编号(章-序号)右对齐、括号宋体数字TNR
+- [ ] 页码："第×页 共×页"、页脚边距1cm
 - [ ] 续表：跨页表头重复、"续表xx"右上标注
+- [ ] 页边距：左3cm 右2cm 上2cm 下2cm
 - [ ] 全部黑色、无额外参数
 
 ## 注意事项
@@ -404,5 +488,6 @@ set_cn_font(run_cont, '宋体', size_pt=10.5)
 - **图题编号自动生成** — alt text 作为描述文字，图/表编号独立逐章编序
 - **表题识别** — 表格前含"表"字的段落作为表题
 - **outline_level 用 `set_outline()` 设置** — `paragraph_format.outline_level` 在部分python-docx版本不生效，统一用XML方式写入；读取时也从XML读取
-- **不添加**：目录页、页码、背景色、修改页边距
+- **公式编号自动生成** — 图/表/公式独立逐章编序，编号格式统一为 `章-序号`
+- **不添加**：目录页、背景色
 - **单位**：字体用 pt、尺寸用 cm

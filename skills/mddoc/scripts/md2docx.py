@@ -24,7 +24,511 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Cm, Pt
+from lxml import etree
 from PIL import Image
+
+
+# ============================================================
+# OMML 公式工具 (LaTeX → OMML XML)
+# ============================================================
+
+# OMML 命名空间
+NSM = 'http://schemas.openxmlformats.org/officeDocument/2006/math'
+
+def _m_qn(local):
+    """构造 m 命名空间的 Clark 格式属性名，如 _m_qn('val') → '{NSM}val'"""
+    return f'{{{NSM}}}{local}'
+
+# LaTeX 希腊字母 → Unicode 映射
+GREEK = {
+    'alpha': 'α', 'beta': 'β', 'gamma': 'γ', 'delta': 'δ',
+    'epsilon': 'ε', 'zeta': 'ζ', 'eta': 'η', 'theta': 'θ',
+    'iota': 'ι', 'kappa': 'κ', 'lambda': 'λ', 'mu': 'μ',
+    'nu': 'ν', 'xi': 'ξ', 'omicron': 'ο', 'pi': 'π',
+    'rho': 'ρ', 'sigma': 'σ', 'tau': 'τ', 'upsilon': 'υ',
+    'phi': 'φ', 'chi': 'χ', 'psi': 'ψ', 'omega': 'ω',
+    'Gamma': 'Γ', 'Delta': 'Δ', 'Theta': 'Θ', 'Lambda': 'Λ',
+    'Xi': 'Ξ', 'Pi': 'Π', 'Sigma': 'Σ', 'Upsilon': 'Υ',
+    'Phi': 'Φ', 'Psi': 'Ψ', 'Omega': 'Ω',
+    'varepsilon': 'ϵ', 'varphi': 'ϕ', 'vartheta': 'ϑ',
+}
+
+# LaTeX 符号 → Unicode
+SYMBOLS = {
+    'infty': '∞', 'cdot': '·', 'times': '×', 'pm': '±', 'mp': '∓',
+    'leq': '≤', 'geq': '≥', 'neq': '≠', 'approx': '≈', 'equiv': '≡',
+    'propto': '∝', 'sim': '∼', 'simeq': '≃',
+    'partial': '∂', 'nabla': '∇', 'forall': '∀', 'exists': '∃',
+    'in': '∈', 'notin': '∉', 'subset': '⊂', 'supset': '⊃',
+    'subseteq': '⊆', 'supseteq': '⊇', 'cap': '∩', 'cup': '∪',
+    'rightarrow': '→', 'leftarrow': '←', 'Rightarrow': '⇒', 'Leftarrow': '⇐',
+    'leftrightarrow': '↔', 'mapsto': '↦',
+    'ldots': '…', 'cdots': '⋯', 'vdots': '⋮', 'ddots': '⋱',
+    'circ': '∘', 'bullet': '•', 'oplus': '⊕', 'otimes': '⊗',
+    'angle': '∠', 'triangle': '△', 'square': '□',
+    'mid': '|', 'parallel': '∥', 'perp': '⊥',
+    'aleph': 'ℵ', 'hbar': 'ℏ', 'imath': 'ı', 'jmath': 'ȷ',
+    'ell': 'ℓ', 'wp': '℘', 'Re': 'ℜ', 'Im': 'ℑ',
+    'prime': '′', 'emptyset': '∅', 'varnothing': '∅',
+    'langle': '⟨', 'rangle': '⟩', 'lceil': '⌈', 'rceil': '⌉',
+    'lfloor': '⌊', 'rfloor': '⌋',
+}
+
+# 需要特殊处理的函数名
+FUNCTIONS = {
+    'sin', 'cos', 'tan', 'cot', 'sec', 'csc',
+    'arcsin', 'arccos', 'arctan',
+    'sinh', 'cosh', 'tanh', 'coth',
+    'log', 'lg', 'ln', 'exp',
+    'lim', 'max', 'min', 'sup', 'inf',
+    'det', 'dim', 'ker', 'gcd', 'deg', 'hom',
+    'arg', 'Pr',
+}
+
+BIG_OPS = {
+    'sum': '∑', 'prod': '∏', 'coprod': '∐',
+    'int': '∫', 'iint': '∬', 'iiint': '∭', 'oint': '∮',
+    'bigcup': '⋃', 'bigcap': '⋂', 'bigvee': '⋁', 'bigwedge': '⋀',
+    'bigoplus': '⨁', 'bigotimes': '⨂', 'bigodot': '⨀',
+}
+
+ACCENTS = {
+    'hat': '̂', 'bar': '̅', 'vec': '⃗', 'dot': '̇',
+    'ddot': '̈', 'tilde': '̃', 'breve': '̆', 'check': '̌',
+    'acute': '́', 'grave': '̀',
+}
+
+
+def _m_elem(tag):
+    """创建带 OMML 命名空间的 XML 元素"""
+    return etree.Element(f'{{{NSM}}}{tag}', nsmap={'m': NSM})
+
+
+def _m_run(text, italic=True):
+    """创建 m:r 元素，包含 m:t 文本子元素"""
+    r = _m_elem('r')
+    if not italic:
+        rPr = _m_elem('rPr')
+        nor = _m_elem('nor')
+        nor.set(_m_qn('val'), '1')
+        rPr.append(nor)
+        r.append(rPr)
+    t_elem = _m_elem('t')
+    t_elem.set(qn('xml:space'), 'preserve')
+    t_elem.text = text
+    r.append(t_elem)
+    return r
+
+
+def _m_text_run(text):
+    """创建非斜体文本 run（用于 \text{}、函数名等）"""
+    return _m_run(text, italic=False)
+
+
+def _m_wrap_d(children):
+    """将子元素列表包装在 m:d（分隔符）元素中"""
+    d = _m_elem('d')
+    for c in children:
+        if isinstance(c, str):
+            d.append(_m_run(c))
+        elif c is not None:
+            d.append(c)
+    return d
+
+
+class _LatexParser:
+    """LaTeX 数学公式递归下降解析器，生成 OMML XML"""
+
+    def __init__(self, latex):
+        self.s = latex
+        self.pos = 0
+
+    def peek(self):
+        if self.pos < len(self.s):
+            return self.s[self.pos]
+        return None
+
+    def consume(self):
+        c = self.peek()
+        if c is not None:
+            self.pos += 1
+        return c
+
+    def expect(self, expected):
+        if self.peek() != expected:
+            return False
+        self.consume()
+        return True
+
+    def skip_spaces(self):
+        while self.peek() in (' ', '\t', '\n'):
+            self.consume()
+
+    def read_name(self):
+        """读取反斜杠后的命令名，如 \frac → 'frac'"""
+        name = []
+        while self.peek() and self.peek().isalpha():
+            name.append(self.consume())
+        return ''.join(name)
+
+    def read_required_arg(self):
+        """读取花括号中的必选参数 { ... }，注意嵌套"""
+        self.skip_spaces()
+        if not self.expect('{'):
+            return None
+        depth = 1
+        buf = []
+        while self.pos < len(self.s) and depth > 0:
+            c = self.consume()
+            if c == '{':
+                depth += 1
+            elif c == '}':
+                depth -= 1
+                if depth == 0:
+                    break
+            buf.append(c)
+        return ''.join(buf)
+
+    def parse_expr(self):
+        """解析表达式：term*"""
+        children = []
+        while self.pos < len(self.s):
+            c = self.peek()
+            if c is None or c == '}':
+                break
+            if c == '&':  # 矩阵列分隔
+                self.consume()
+                children.append(_m_run('&'))
+                continue
+            if c == '\\\\':  # 矩阵行分隔
+                self.consume()
+                self.consume()
+                children.append(_m_run('\\\\'))
+                continue
+            term = self.parse_term()
+            if term is not None:
+                children.append(term)
+            if self.peek() == '}':
+                break
+        return children
+
+    def parse_term(self):
+        """解析单个 term：atom 后可选 sub/sup"""
+        c = self.peek()
+        if c is None or c == '}':
+            return None
+
+        # 上标 ^
+        if c == '^':
+            self.consume()
+            sup_elem = self.parse_atom()
+            if sup_elem is not None:
+                sSup = _m_elem('sSup')
+                sSup_e = _m_elem('e')
+                sSup_e.append(_m_run(''))  # 空基数
+                sSup.append(sSup_e)
+                sSup_sup = _m_elem('sup')
+                sSup_sup.append(sup_elem if not isinstance(sup_elem, str) else _m_run(sup_elem))
+                sSup.append(sSup_sup)
+                return sSup  # Don't try to attach sub/sup further
+            else:
+                return _m_run('^')
+
+        # 下标 _
+        if c == '_':
+            self.consume()
+            sub_elem = self.parse_atom()
+            if sub_elem is not None:
+                sSub = _m_elem('sSub')
+                sSub_e = _m_elem('e')
+                sSub_e.append(_m_run(''))
+                sSub.append(sSub_e)
+                sSub_sub = _m_elem('sub')
+                sSub_sub.append(sub_elem if not isinstance(sub_elem, str) else _m_run(sub_elem))
+                sSub.append(sSub_sub)
+                return sSub
+            else:
+                return _m_run('_')
+
+        # atom
+        atom = self.parse_atom()
+        if atom is None:
+            return None
+
+        # 检查后续的 sub/sup
+        c = self.peek()
+
+        # _ 后接 ^ (如 x_i^2 或 \sum_{i=1}^{n})
+        if c == '_':
+            self.consume()
+            sub_arg = self.parse_atom()
+            sup_arg = None
+            if self.peek() == '^':
+                self.consume()
+                sup_arg = self.parse_atom()
+
+            if sup_arg is not None:
+                sSubSup = _m_elem('sSubSup')
+                e = _m_elem('e')
+                e.append(atom if not isinstance(atom, str) else _m_run(atom))
+                sSubSup.append(e)
+                s = _m_elem('sub')
+                s.append(sub_arg if not isinstance(sub_arg, str) else _m_run(sub_arg))
+                sSubSup.append(s)
+                sup = _m_elem('sup')
+                sup.append(sup_arg if not isinstance(sup_arg, str) else _m_run(sup_arg))
+                sSubSup.append(sup)
+                return sSubSup
+            else:
+                sSub = _m_elem('sSub')
+                e = _m_elem('e')
+                e.append(atom if not isinstance(atom, str) else _m_run(atom))
+                sSub.append(e)
+                s = _m_elem('sub')
+                s.append(sub_arg if not isinstance(sub_arg, str) else _m_run(sub_arg))
+                sSub.append(s)
+                return sSub
+
+        elif c == '^':
+            self.consume()
+            sup_arg = self.parse_atom()
+            if sup_arg is not None:
+                sSup = _m_elem('sSup')
+                e = _m_elem('e')
+                e.append(atom if not isinstance(atom, str) else _m_run(atom))
+                sSup.append(e)
+                sup = _m_elem('sup')
+                sup.append(sup_arg if not isinstance(sup_arg, str) else _m_run(sup_arg))
+                sSup.append(sup)
+                return sSup
+
+        return atom
+
+    def parse_atom(self):
+        """解析最小单元：字母/数字、命令、花括号组"""
+        c = self.peek()
+        if c is None or c == '}' or c == '&':
+            return None
+
+        # 花括号组 { ... }
+        if c == '{':
+            self.consume()
+            children = self.parse_expr()
+            self.expect('}')  # consume closing brace if present
+            if len(children) == 1:
+                return children[0]
+            return _m_wrap_d(children)
+
+        # LaTeX 命令 \
+        if c == '\\':
+            self.consume()
+            if self.peek() is None:
+                return _m_run('\\')
+
+            # 检查是否为空
+            if self.peek() in (' ', '\t', '\n'):
+                return _m_run(' ')
+
+            name = self.read_name()
+            if not name:
+                # 转义字符如 \$ \# \% \& \_ \{ \}
+                esc = self.consume()
+                if esc:
+                    return _m_run(esc)
+                return _m_run('\\')
+
+            # n-ary 大运算符（sum, prod, int 等）
+            if name in BIG_OPS:
+                nary = _m_elem('nary')
+                naryPr = _m_elem('naryPr')
+                chr_elem = _m_elem('chr')
+                chr_elem.set(_m_qn('val'), BIG_OPS[name])
+                naryPr.append(chr_elem)
+                limLoc = _m_elem('limLoc')
+                limLoc.set(_m_qn('val'), 'undOvr')  # limits above and below
+                naryPr.append(limLoc)
+                nary.append(naryPr)
+
+                # 读取下上限
+                if self.peek() == '_':
+                    self.consume()
+                    sub_arg = self.parse_atom()
+                    if sub_arg is not None:
+                        sub = _m_elem('sub')
+                        sub.append(sub_arg if not isinstance(sub_arg, str) else _m_run(sub_arg))
+                        nary.append(sub)
+
+                if self.peek() == '^':
+                    self.consume()
+                    sup_arg = self.parse_atom()
+                    if sup_arg is not None:
+                        sup = _m_elem('sup')
+                        sup.append(sup_arg if not isinstance(sup_arg, str) else _m_run(sup_arg))
+                        nary.append(sup)
+
+                e = _m_elem('e')
+                # 读取 integrand / summand
+                rest = self.parse_expr()
+                if rest:
+                    for r in rest:
+                        e.append(r if not isinstance(r, str) else _m_run(r))
+                nary.append(e)
+                return nary
+
+            # 分数 \frac{num}{den}
+            if name == 'frac':
+                num_text = self.read_required_arg()
+                den_text = self.read_required_arg()
+                if num_text is not None and den_text is not None:
+                    f = _m_elem('f')
+                    num = _m_elem('num')
+                    num_parsed = _LatexParser(num_text).parse_expr()
+                    for item in num_parsed:
+                        num.append(item if not isinstance(item, str) else _m_run(item))
+                    f.append(num)
+                    den = _m_elem('den')
+                    den_parsed = _LatexParser(den_text).parse_expr()
+                    for item in den_parsed:
+                        den.append(item if not isinstance(item, str) else _m_run(item))
+                    f.append(den)
+                    return f
+                return _m_run(f'\\frac{{{num_text}}}{{{den_text}}}')
+
+            # 平方根 \sqrt{...} 或 \sqrt[n]{...}
+            if name == 'sqrt':
+                rad = _m_elem('rad')
+                deg = None
+                if self.peek() == '[':
+                    self.consume()
+                    deg_text = []
+                    while self.peek() and self.peek() != ']':
+                        deg_text.append(self.consume())
+                    self.expect(']')
+                    deg_text = ''.join(deg_text)
+                    deg = _m_elem('deg')
+                    deg.append(_m_run(deg_text))
+                if deg is not None:
+                    rad.append(deg)
+                e = _m_elem('e')
+                body = self.read_required_arg()
+                if body is not None:
+                    body_parsed = _LatexParser(body).parse_expr()
+                    for item in body_parsed:
+                        e.append(item if not isinstance(item, str) else _m_run(item))
+                rad.append(e)
+                return rad
+
+            # 函数名 \sin, \cos, \log 等
+            if name in FUNCTIONS:
+                return _m_run(name)
+
+            # 文本 \text{...}
+            if name == 'text':
+                txt = self.read_required_arg()
+                return _m_text_run(txt) if txt else _m_run('\\text{}')
+
+            # 重音符 \hat, \bar, \vec 等
+            if name in ACCENTS:
+                acc = _m_elem('acc')
+                accPr = _m_elem('accPr')
+                chr_elem = _m_elem('chr')
+                chr_elem.set(_m_qn('val'), ACCENTS[name])
+                accPr.append(chr_elem)
+                acc.append(accPr)
+                e = _m_elem('e')
+                # 重音符可以跟花括号参数或单个字符
+                base = self.parse_atom()
+                if base is not None:
+                    e.append(base if not isinstance(base, str) else _m_run(base))
+                acc.append(e)
+                return acc
+
+            # 定界符 \left( \right) \left[ \right] 等
+            if name == 'left':
+                delim_char = self.consume()
+                # 暂时用 d 包装，标记左定界符
+                d = _m_elem('d')
+                dPr = _m_elem('dPr')
+                begChr = _m_elem('begChr')
+                begChr.set(_m_qn('val'), delim_char or '(')
+                dPr.append(begChr)
+                d.append(dPr)
+                # 读取直到 \right
+                body = []
+                while self.pos < len(self.s):
+                    if self.peek() == '\\':
+                        saved = self.pos
+                        self.consume()
+                        name2 = self.read_name()
+                        if name2 == 'right':
+                            right_delim = self.consume()
+                            endChr = _m_elem('endChr')
+                            endChr.set(_m_qn('val'), right_delim or ')')
+                            dPr.append(endChr)
+                            break
+                        else:
+                            # 不是 \right，回退
+                            self.pos = saved
+                            body.append(self.parse_term())
+                    else:
+                        body.append(self.parse_term())
+                for b in body:
+                    if b is not None:
+                        d.append(b if not isinstance(b, str) else _m_run(b))
+                return d
+
+            # 花括号（literal braces via \{ \}）
+            if name == '{':
+                return _m_run('{')
+            if name == '}':
+                return _m_run('}')
+
+            # 希腊字母
+            if name in GREEK:
+                return _m_run(GREEK[name])
+
+            # 符号
+            if name in SYMBOLS:
+                return _m_run(SYMBOLS[name])
+
+            # 未知命令：保留原始文本
+            result = ['\\' + name]
+            if self.peek() == '{':
+                result.append('{' + (self.read_required_arg() or '') + '}')
+            return _m_run(''.join(result))
+
+        # 普通字符
+        ch = self.consume()
+        return _m_run(ch)
+
+    def parse(self):
+        """主入口：解析整个 LaTeX 字符串并返回 OMML 元素列表"""
+        self.skip_spaces()
+        return self.parse_expr()
+
+
+def latex_to_omml(latex, display=False):
+    """将 LaTeX 数学公式转换为 OMML XML 元素
+
+    参数:
+        latex: LaTeX 公式字符串（不含 $ 定界符）
+        display: True=行间公式(m:oMathPara), False=行内公式(m:oMath)
+    返回:
+        OMML 顶级元素（m:oMath 或 m:oMathPara），可直接插入段落 XML
+    """
+    parser = _LatexParser(latex)
+    children = parser.parse()
+
+    omml = _m_elem('oMath')
+    for c in children:
+        omml.append(c if not isinstance(c, str) else _m_run(c))
+
+    if display:
+        omp = _m_elem('oMathPara')
+        omp.append(omml)
+        return omp
+
+    return omml
 
 
 # ============================================================
@@ -184,6 +688,27 @@ def set_outline_level(paragraph, level):
 # Markdown 解析
 # ============================================================
 
+def split_inline_math(text):
+    r"""分割段落文本中的行内公式 $...$，返回 segment 列表。
+    每个 segment: {'type': 'text'|'math', 'content': str}
+    支持 \$ 转义，不支持嵌套。
+    """
+    if not text:
+        return [{'type': 'text', 'content': text}]
+    segments = []
+    # 匹配 $...$ 但不匹配 $$
+    pattern = re.compile(r'(?<!\\)\$([^$]+?)(?<!\\)\$')
+    last_end = 0
+    for m in pattern.finditer(text):
+        if m.start() > last_end:
+            segments.append({'type': 'text', 'content': text[last_end:m.start()]})
+        segments.append({'type': 'math', 'content': m.group(1)})
+        last_end = m.end()
+    if last_end < len(text):
+        segments.append({'type': 'text', 'content': text[last_end:]})
+    return segments if segments else [{'type': 'text', 'content': text}]
+
+
 def parse_markdown(text):
     """解析 Markdown 文本，返回节点列表。
     每个节点: {'type': 'title'|'heading'|'para'|'image'|'table'|'code'|'list',
@@ -214,6 +739,26 @@ def parse_markdown(text):
                 i += 1
             i += 1
             nodes.append({'type': 'code', 'text': '\n'.join(code_lines)})
+            continue
+
+        # 行间公式 $$ ... $$（同行或跨行）
+        if line.strip().startswith('$$'):
+            stripped = line.strip()
+            # 同行闭合：$$ ... $$
+            if stripped.count('$$') >= 2:
+                inner = re.search(r'\$\$(.+?)\$\$', stripped)
+                if inner:
+                    nodes.append({'type': 'display_math', 'text': inner.group(1).strip()})
+                    i += 1
+                    continue
+            # 跨行：$$ 独占一行开始
+            math_lines = []
+            i += 1
+            while i < len(lines) and not lines[i].strip().startswith('$$'):
+                math_lines.append(lines[i])
+                i += 1
+            i += 1  # skip closing $$
+            nodes.append({'type': 'display_math', 'text': '\n'.join(math_lines).strip()})
             continue
 
         # 标题 (# ...)
@@ -274,7 +819,8 @@ def parse_markdown(text):
             continue
 
         # 普通段落
-        nodes.append({'type': 'para', 'text': line.strip()})
+        text = line.strip()
+        nodes.append({'type': 'para', 'text': text, 'segments': split_inline_math(text)})
         i += 1
 
     return nodes
@@ -305,8 +851,13 @@ def generate_docx(nodes, output_path, title_text):
     style.paragraph_format.space_before = Pt(0)
     style.paragraph_format.space_after = Pt(0)
 
-    # --- 节/页眉设置 ---
+    # --- 节/页边距设置 ---
     section = doc.sections[0]
+    # 页边距：左3cm 右2cm 上2cm 下2cm
+    section.left_margin = Cm(3)
+    section.right_margin = Cm(2)
+    section.top_margin = Cm(2)
+    section.bottom_margin = Cm(2)
     header = section.header
     header.is_linked_to_previous = False
     # 左顶格 xxxxx
@@ -322,7 +873,7 @@ def generate_docx(nodes, output_path, title_text):
     set_run_font(run_r, '黑体', size_pt=9)
 
     # --- 页脚/页码设置 ---
-    section.footer_distance = Cm(1.1)
+    section.footer_distance = Cm(1)
     footer = section.footer
     footer.is_linked_to_previous = False
     fp = footer.paragraphs[0]
@@ -357,6 +908,7 @@ def generate_docx(nodes, output_path, title_text):
     chapter_path = [1]  # 一级标题序号
     fig_counter = {}  # key: chapter index tuple, value: counter
     tab_counter = {}
+    eq_counter = {}
 
     def get_chapter_key():
         return tuple(chapter_path[:1])  # 只用一级序号作为章key
@@ -370,6 +922,11 @@ def generate_docx(nodes, output_path, title_text):
         key = get_chapter_key()
         tab_counter[key] = tab_counter.get(key, 0) + 1
         return tab_counter[key]
+
+    def incr_eq():
+        key = get_chapter_key()
+        eq_counter[key] = eq_counter.get(key, 0) + 1
+        return eq_counter[key]
 
     def make_fig_label():
         return f"图{chapter_path[0]}-{incr_fig()}"
@@ -427,8 +984,21 @@ def generate_docx(nodes, output_path, title_text):
             p.paragraph_format.line_spacing = 1.3
             p.paragraph_format.space_before = Pt(0)
             p.paragraph_format.space_after = Pt(0)
-            run = p.add_run(node['text'])
-            set_run_font(run, '宋体', size_pt=10.5)
+            segments = node.get('segments', [{'type': 'text', 'content': node['text']}])
+            for seg in segments:
+                if seg['type'] == 'text':
+                    if seg['content']:  # 跳过空字符串
+                        run = p.add_run(seg['content'])
+                        set_run_font(run, '宋体', size_pt=10.5)
+                else:  # math — 插入 OMML 公式
+                    try:
+                        omml = latex_to_omml(seg['content'], display=False)
+                        p._element.append(omml)
+                    except Exception:
+                        # 解析失败时回退到斜体文本
+                        run = p.add_run(seg['content'])
+                        set_run_font(run, '宋体', en_font='Times New Roman', size_pt=10.5)
+                        run.font.italic = True
 
         elif t == 'image':
             url = node['url']
@@ -511,6 +1081,51 @@ def generate_docx(nodes, output_path, title_text):
             p.paragraph_format.left_indent = Cm(1)
             run = p.add_run(node['text'])
             set_run_font(run, '宋体', en_font='Courier New', size_pt=10.5)
+
+        elif t == 'display_math':
+            # 行间公式：上下各空一行，公式居中，编号右对齐
+            add_empty_para(doc)
+            p = doc.add_paragraph()
+            # 设置段落 tab stops：居中 + 右对齐
+            pPr = p._element.get_or_add_pPr()
+            tabs = OxmlElement('w:tabs')
+            # 居中 tab：左边距3cm右边距2cm，可用宽度16cm，中心8cm → 4536 twips
+            center_tab = OxmlElement('w:tab')
+            center_tab.set(qn('w:val'), 'center')
+            center_tab.set(qn('w:pos'), '4536')
+            tabs.append(center_tab)
+            # 右对齐 tab：16cm → 9072 twips
+            right_tab = OxmlElement('w:tab')
+            right_tab.set(qn('w:val'), 'right')
+            right_tab.set(qn('w:pos'), '9072')
+            tabs.append(right_tab)
+            pPr.append(tabs)
+            # tab → 居中位置
+            run_t1 = p.add_run()
+            tab1 = OxmlElement('w:tab')
+            run_t1._r.append(tab1)
+            # 插入 OMML 行内公式（m:oMath 在 w:r 同级参与排版）
+            try:
+                omml = latex_to_omml(node['text'], display=False)
+                p._element.append(omml)
+            except Exception:
+                run_fb = p.add_run(node['text'])
+                set_run_font(run_fb, '宋体', en_font='Times New Roman', size_pt=10.5)
+                run_fb.font.italic = True
+            # tab → 右对齐位置 → 公式编号
+            run_t2 = p.add_run()
+            tab2 = OxmlElement('w:tab')
+            run_t2._r.append(tab2)
+            ch_num = chapter_path[0]
+            eq_num = incr_eq()
+            # 编号格式：括号用宋体，数字用TNR
+            run_lp = p.add_run('(')
+            set_run_font(run_lp, '宋体', en_font='宋体', size_pt=10.5)
+            run_lnum = p.add_run(f'{ch_num}-{eq_num}')
+            set_run_font(run_lnum, '宋体', en_font='Times New Roman', size_pt=10.5)
+            run_rp = p.add_run(')')
+            set_run_font(run_rp, '宋体', en_font='宋体', size_pt=10.5)
+            add_empty_para(doc)
 
         elif t == 'list':
             for idx, item in enumerate(node['children'], 1):

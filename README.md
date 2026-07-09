@@ -2,15 +2,15 @@
 
 [![Claude Code](https://img.shields.io/badge/Agent-Claude%20Code-orange?logo=claude)](https://claude.com/code)
 [![Codex](https://img.shields.io/badge/Agent-Codex-blue?logo=openai)](https://github.com/openai/codex)
+[![Cursor](https://img.shields.io/badge/Agent-Cursor-6c47ff?logo=cursor)](https://cursor.com)
 [![OpenCode](https://img.shields.io/badge/Agent-OpenCode-teal)](https://opencode.ai)
 [![Version](https://img.shields.io/github/v/release/Trisia/mddocx)](https://github.com/Trisia/mddocx/releases)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue?logo=python)](https://python.org)
 [![CI](https://github.com/Trisia/mddocx/actions/workflows/release.yml/badge.svg)](https://github.com/Trisia/mddocx/actions/workflows/release.yml)
 [![Clawhub](https://img.shields.io/badge/Clawhub-mddocx-8b5cf6)](https://clawhub.ai/Trisia/mddoc)
-[![npm](https://img.shields.io/npm/v/mddocx)](https://www.npmjs.com/package/mddocx)
 
-将 Markdown 转换为符合学术规范的 Word 文档的Agent Skill，支持三线表、图题/表题自动编号、页码、页眉等学术论文排版规范。
+将 Markdown 转换为符合学术规范的 Word 文档的Agent Skill，支持 LaTeX 公式（OMML）、三线表、图题/表题自动编号、页码、页眉等学术论文排版规范。
 
 ![MD与DOCX生成效果](./examples/demo.png)
 
@@ -87,6 +87,9 @@ python skills/mddoc/scripts/md2docx.py --text "# 标题\n\n正文" -o out.docx
 | 表格 | 三线表(顶线粗/表头底线细/底线粗)、表头重复 |
 | 图题 | 小五(9pt)宋体加粗居中、"图1-1 xxx"格式 |
 | 表题 | 五号(10.5pt)宋体加粗居中、"表1-1 xxx"格式 |
-| 页码 | "第×页 共×页"、页脚边距1.1cm |
+| 页码 | "第×页 共×页"、页脚边距1cm |
 | 列表 | 有序列表用（1）（2）（3）序号 |
+| 行内公式 | $...$ 转 OMML、嵌于段落、WPS/Word 可渲染 |
+| 行间公式 | $$...$$ 转 OMML 居中、编号(章-序号)右对齐 |
+| 页边距 | 左3cm 右2cm 上2cm 下2cm |
 
