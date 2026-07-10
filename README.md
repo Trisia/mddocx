@@ -4,6 +4,7 @@
 [![Codex](https://img.shields.io/badge/Agent-Codex-blue?logo=openai)](https://github.com/openai/codex)
 [![Cursor](https://img.shields.io/badge/Agent-Cursor-6c47ff?logo=cursor)](https://cursor.com)
 [![OpenCode](https://img.shields.io/badge/Agent-OpenCode-teal)](https://opencode.ai)
+[![npm](https://img.shields.io/npm/v/@cliven/mddocx?color=red)](https://www.npmjs.com/package/@cliven/mddocx)
 [![Version](https://img.shields.io/github/v/release/Trisia/mddocx)](https://github.com/Trisia/mddocx/releases)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue?logo=python)](https://python.org)
