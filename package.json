@@ -1,5 +1,5 @@
 {
-  "name": "mddocx",
+  "name": "@cliven/mddocx",
   "version": "1.0.1",
   "description": "Markdown 转学术格式 DOCX",
   "type": "module",

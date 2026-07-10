@@ -47,9 +47,9 @@ pip install python-docx Pillow requests mistune
 ### npx（无需安装）
 
 ```bash
-npx mddocx paper.md                    # 转换文件
-npx mddocx paper.md -o output.docx     # 指定输出
-npx mddocx --text "# 标题" -o out.docx # 转换文本
+npx @cliven/mddocx paper.md                    # 转换文件
+npx @cliven/mddocx paper.md -o output.docx     # 指定输出
+npx @cliven/mddocx --text "# 标题" -o out.docx # 转换文本
 ```
 
 ### Claude Code 中
