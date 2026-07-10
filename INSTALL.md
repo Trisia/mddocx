@@ -5,6 +5,21 @@
 ---
 
 
+## npm（推荐，全平台通用）
+
+```copy
+请帮我用 npm 安装 mddocx：
+
+npm install -g @cliven/mddocx
+pip install python-docx Pillow requests mistune
+```
+
+安装后即可使用 `mddocx` 命令，或直接用 `npx @cliven/mddocx` 无需安装。
+
+> npm 包内含 Claude Code / Codex / OpenCode / Cursor 的插件配置，各平台可通过插件机制自动注册技能。
+
+---
+
 ## Claude Code
 
 ```copy
