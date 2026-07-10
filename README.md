@@ -19,23 +19,13 @@
 
 ### 🤖 一键安装
 
-复制粘贴给任意智能体即可安装：
+将以下内容复制粘贴给任意智能体（Claude Code / Codex / OpenCode / Cursor）即可安装。
+
+> 各平台专属安装说明详见 **[INSTALL.md](INSTALL.md)**。
 
 ```copy
-请帮我安装 mddocx 插件：
-
-git clone https://github.com/Trisia/mddocx /tmp/mddocx
-mkdir -p ~/.claude/skills/mddoc
-cp -r /tmp/mddocx/skills/mddoc/* ~/.claude/skills/mddoc/
-rm -rf /tmp/mddocx
-
-python3 -m venv ~/.claude/venvs/mddocx
-~/.claude/venvs/mddocx/bin/pip install python-docx Pillow requests mistune
+请根据 https://github.com/Trisia/mddocx/blob/main/INSTALL.md 中对应平台的说明，帮我安装 mddocx
 ```
-
-### 📖 完整安装指南
-
-支持 **Claude Code** / **Codex** / **OpenCode** / **Cursor** / **通用** 等多种方式，详见 **[INSTALL.md](INSTALL.md)**。
 
 ### 依赖
 
