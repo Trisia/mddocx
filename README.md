@@ -1,6 +1,6 @@
 # mddocx — Markdown 转学术格式 DOCX
 
-[![Claude Code](https://img.shields.io/badge/Agent-Claude%20Code-orange?logo=claude)](https://claude.com/code)
+[![Claude Code](https://img.shields.io/badge/Agent-Claude%20Code-orange?logo=claude)](https://www.claudepluginhub.com/plugins/trisia-mddocx)
 [![Codex](https://img.shields.io/badge/Agent-Codex-blue?logo=openai)](https://github.com/openai/codex)
 [![Cursor](https://img.shields.io/badge/Agent-Cursor-6c47ff?logo=cursor)](https://cursor.com)
 [![OpenCode](https://img.shields.io/badge/Agent-OpenCode-teal)](https://opencode.ai)
