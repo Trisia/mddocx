@@ -838,7 +838,7 @@ def extract_title_text(title_node):
     return text.strip()
 
 
-def generate_docx(nodes, output_path, title_text):
+def generate_docx(nodes, output_path, title_text=None):
     """根据节点列表生成 docx 文件"""
     doc = Document()
 
@@ -869,7 +869,7 @@ def generate_docx(nodes, output_path, title_text):
     hp_right = header.add_paragraph()
     hp_right.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     hp_right.paragraph_format.space_before = Pt(0)
-    run_r = hp_right.add_run(title_text)
+    run_r = hp_right.add_run(title_text or '未命名文档')
     set_run_font(run_r, '黑体', size_pt=9)
 
     # --- 页脚/页码设置 ---
@@ -1177,19 +1177,21 @@ def main():
     # 解析
     nodes = parse_markdown(md_content)
 
-    # 提取题目
+    # 提取题目（可选）
     title_node = next((n for n in nodes if n['type'] == 'title'), None)
-    if title_node is None:
-        print("错误：未找到文档标题（第一个 # 标题）", file=sys.stderr)
-        sys.exit(1)
-    title_text = extract_title_text(title_node)
+    title_text = extract_title_text(title_node) if title_node else None
 
     # 确定输出路径
     if args.output:
         output_path = args.output
-    else:
+    elif title_text:
         safe_name = re.sub(r'[\\/*?:"<>|]', '', title_text)
         output_path = os.path.join(source_dir, f'{safe_name}.docx')
+    elif args.text:
+        output_path = os.path.join(source_dir, '未命名文档.docx')
+    else:
+        stem = os.path.splitext(os.path.basename(args.input))[0]
+        output_path = os.path.join(source_dir, f'{stem}.docx')
 
     # 生成
     generate_docx(nodes, output_path, title_text)

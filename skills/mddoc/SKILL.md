@@ -28,7 +28,7 @@ python <skill-path>/scripts/md2docx.py --text "# 标题\n\n正文内容" -o out.
 1. **读取输入** — 若用户粘贴 Markdown 文本则直接读取；若用户提供文件路径（含 `@` 引用）则读取该文件
 2. **安装依赖**（如未安装）— `pip install python-docx Pillow requests mistune`
 3. **执行转换** — 优先使用内置脚本 `scripts/md2docx.py`；若 Markdown 结构特殊则参照下方格式规范编写自定义脚本
-4. **确定输出** — 文件路径输入→同目录；粘贴内容→当前目录；文件名=「题目.docx」，题目从第一个 `# 标题` 提取
+4. **确定输出** — 文件路径输入→同目录；粘贴内容→当前目录；文件名=「题目.docx」（题目从第一个 `# 标题` 提取；若无 `#` 标题则使用输入文件名，`--text` 模式为「未命名文档.docx」）
 5. **验证** — 检查 outline level、图片嵌入、页眉、分页符
 
 ---
@@ -117,6 +117,14 @@ run = p.add_run(title_text)
 set_cn_font(run, '黑体', size_pt=16)
 add_empty(doc)
 ```
+
+### 无标题文档
+
+当输入 Markdown 没有 `#` 标题时：
+- 跳过标题页，文档从第一个内容节点开始排版
+- 页眉右侧显示「未命名文档」代替标题
+- 页眉左侧「xxxxx」保持不变
+- 输出文件名：文件输入使用输入文件名（如 `paper.md` → `paper.docx`），`--text` 模式使用「未命名文档.docx」
 
 ### 一级标题（后续 `#`）
 
@@ -462,6 +470,7 @@ set_cn_font(run_cont, '宋体', size_pt=10.5)
 ## 生成后自检清单
 
 - [ ] 题目：16pt黑体、居中、无outline、上下各空一行
+- [ ] 无标题文档：跳过标题页、页眉显示「未命名文档」
 - [ ] 一级标题：16pt黑体、outline_level=1、前有分页符、上下各空一行
 - [ ] 二级标题：14pt黑体、顶格、outline_level=2、不加粗、**上下不空行**
 - [ ] 三级标题：12pt宋体、首行缩进Pt(21)、outline_level=3、不加粗、**上下不空行**
@@ -482,7 +491,7 @@ set_cn_font(run_cont, '宋体', size_pt=10.5)
 
 ## 注意事项
 
-- **第一个 `#` 是题目**（不设 outline），后续 `#` 是一级标题（outline_level=1）
+- **第一个 `#` 是题目**（不设 outline），后续 `#` 是一级标题（outline_level=1）；若无 `#` 标题仍可正常生成文档
 - **图片尺寸用 `Cm()`，不手算 EMU** — `add_picture(width=Cm(x))` 自动转换
 - **图片下载必设 User-Agent** — 否则 CDN/Wikipedia 返回 400
 - **图题编号自动生成** — alt text 作为描述文字，图/表编号独立逐章编序
