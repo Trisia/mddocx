@@ -1,6 +1,6 @@
 {
   "name": "@cliven/mddocx",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Markdown 转学术格式 DOCX",
   "type": "module",
   "main": ".opencode/plugins/mddocx.js",
