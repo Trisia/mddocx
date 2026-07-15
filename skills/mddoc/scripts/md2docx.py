@@ -51,6 +51,7 @@ GREEK = {
     'Xi': 'Ξ', 'Pi': 'Π', 'Sigma': 'Σ', 'Upsilon': 'Υ',
     'Phi': 'Φ', 'Psi': 'Ψ', 'Omega': 'Ω',
     'varepsilon': 'ϵ', 'varphi': 'ϕ', 'vartheta': 'ϑ',
+    'varpi': 'ϖ', 'varrho': 'ϱ', 'varsigma': 'ς',
 }
 
 # LaTeX 符号 → Unicode
@@ -72,6 +73,24 @@ SYMBOLS = {
     'prime': '′', 'emptyset': '∅', 'varnothing': '∅',
     'langle': '⟨', 'rangle': '⟩', 'lceil': '⌈', 'rceil': '⌉',
     'lfloor': '⌊', 'rfloor': '⌋',
+    # 阶段3 补全：二元运算符
+    'div': '÷', 'ominus': '⊖', 'oslash': '⊘', 'star': '⋆', 'odot': '⊙',
+    # 阶段3 补全：关系符
+    'll': '≪', 'gg': '≫', 'prec': '≺', 'succ': '≻',
+    'preceq': '≼', 'succeq': '≽', 'nsim': '≁', 'asymp': '≍',
+    # 阶段3 补全：逻辑符号
+    'top': '⊤', 'bot': '⊥', 'neg': '¬', 'nexists': '∄',
+    'wedge': '∧', 'vee': '∨',
+    # 阶段3 补全：集合符号
+    'setminus': '∖', 'nsubseteq': '⊈', 'nsupseteq': '⊉',
+    # 阶段3 补全：箭头
+    'to': '→', 'longrightarrow': '⟶', 'longmapsto': '⟼',
+    'uparrow': '↑', 'downarrow': '↓', 'updownarrow': '↕',
+    'Uparrow': '⇑', 'Downarrow': '⇓', 'Updownarrow': '⇕',
+    'longleftarrow': '⟵', 'Leftrightarrow': '⇔',
+    # 阶段3 补全：常用别名
+    'ge': '≥', 'le': '≤', 'ne': '≠', 'gets': '←',
+    'backslash': '\\',
 }
 
 # 需要特殊处理的函数名
@@ -136,12 +155,198 @@ def _m_wrap_d(children):
     return d
 
 
+def _m_run_with_style(text, italic=True, bold=False, script=None, normal=False):
+    """创建带样式属性的 m:r 元素
+
+    参数:
+        text: 显示文本
+        italic: 是否斜体（默认 True）
+        bold: 是否粗体
+        script: 脚本字体类型 ('script' 对应 \\mathcal, 'double-struck' 对应 \\mathbb)
+        normal: 是否正体（覆盖 italic）
+
+    返回:
+        m:r XML 元素
+    """
+    r = _m_elem('r')
+    rPr = _m_elem('rPr')
+
+    if normal:
+        nor = _m_elem('nor')
+        rPr.append(nor)
+    elif bold:
+        sty = _m_elem('sty')
+        sty.set(_m_qn('val'), 'b')
+        rPr.append(sty)
+    elif script:
+        scr = _m_elem('scr')
+        scr.set(_m_qn('val'), script)
+        rPr.append(scr)
+    elif not italic:
+        nor = _m_elem('nor')
+        rPr.append(nor)
+
+    # 仅在 rPr 有子元素时追加
+    if len(rPr) > 0:
+        r.append(rPr)
+
+    t_elem = _m_elem('t')
+    t_elem.set(qn('xml:space'), 'preserve')
+    t_elem.text = text
+    r.append(t_elem)
+    return r
+
+
+def _build_matrix(cell_ommls, left_delim=None, right_delim=None):
+    """从已解析的单元格 OMML 元素构建矩阵结构
+
+    参数:
+        cell_ommls: 二维列表 [[cell1, cell2, ...], [cell1, cell2, ...], ...]
+                    每个 cell 是 OMML 元素列表（由 _LatexParser.parse() 返回）
+        left_delim: 左定界符字符（可选，如 '(' '[' '|' '{'）
+        right_delim: 右定界符字符（可选，如 ')' ']' '|' '}'）
+
+    返回:
+        m:d 或 m:m XML 元素
+    """
+    ncols = max((len(row) for row in cell_ommls), default=0)
+
+    mat = _m_elem('m')
+    mPr = _m_elem('mPr')
+    mcs = _m_elem('mcs')
+    mc = _m_elem('mc')
+    mcPr = _m_elem('mcPr')
+    count = _m_elem('count')
+    count.set(_m_qn('val'), str(ncols))
+    mcPr.append(count)
+    mcJc = _m_elem('mcJc')
+    mcJc.set(_m_qn('val'), 'center')
+    mcPr.append(mcJc)
+    mc.append(mcPr)
+    mcs.append(mc)
+    mPr.append(mcs)
+    mat.append(mPr)
+
+    # 构建行
+    for row in cell_ommls:
+        mr = _m_elem('mr')
+        for cell_children in row:
+            e = _m_elem('e')
+            for child in cell_children:
+                if isinstance(child, str):
+                    e.append(_m_run(child))
+                elif child is not None:
+                    e.append(child)
+            mr.append(e)
+        mat.append(mr)
+
+    # 有定界符时外层包裹 m:d
+    if left_delim is not None or right_delim is not None:
+        d = _m_elem('d')
+        dPr = _m_elem('dPr')
+        if left_delim is not None:
+            begChr = _m_elem('begChr')
+            begChr.set(_m_qn('val'), left_delim)
+            dPr.append(begChr)
+        if right_delim is not None:
+            endChr = _m_elem('endChr')
+            endChr.set(_m_qn('val'), right_delim)
+            dPr.append(endChr)
+        # 只有左定界符时也需显式声明右定界符为空，否则 Word 自动配对
+        if left_delim is not None and right_delim is None:
+            endChr = _m_elem('endChr')
+            endChr.set(_m_qn('val'), '')
+            dPr.append(endChr)
+        d.append(dPr)
+        e = _m_elem('e')
+        e.append(mat)
+        d.append(e)
+        return d
+
+    return mat
+
+
+# 矩阵环境 → 定界符映射
+_MATRIX_DELIMS = {
+    'matrix': (None, None),
+    'bmatrix': ('[', ']'),
+    'pmatrix': ('(', ')'),
+    'vmatrix': ('|', '|'),
+    'Vmatrix': ('‖', '‖'),
+}
+
+
+# 字体样式命令 → _m_run_with_style 参数映射
+_FONT_STYLES = {
+    'mathbf':      {'bold': True},
+    'bm':          {'bold': True},
+    'boldsymbol':  {'bold': True},
+    'mathit':      {'italic': True},
+    'mathrm':      {'normal': True},
+    'mathcal':     {'script': 'script'},
+    'mathscr':     {'script': 'script'},
+    'mathbb':      {'script': 'double-struck'},
+    'mathtt':      {'italic': False},  # 等宽正体
+}
+
+
+def _apply_style_to_elem(elem, style_args):
+    """递归对 OMML 元素树中的所有 m:r 元素应用字体样式
+
+    参数:
+        elem: OMML XML 元素
+        style_args: 传给 _m_run_with_style 的关键字参数字典
+
+    返回:
+        应用样式后的元素（可能是新元素）
+    """
+    tag = elem.tag.split('}')[-1] if '}' in elem.tag else elem.tag
+    if tag == 'r':
+        # 替换 m:r 元素: 保留文本内容，用 _m_run_with_style 重新生成
+        t_elem = elem.find(f'{{{NSM}}}t')
+        text = t_elem.text if t_elem is not None else ''
+        italic = not style_args.get('normal', False) and style_args.get('italic', True)
+        bold = style_args.get('bold', False)
+        script = style_args.get('script', None)
+        normal = style_args.get('normal', False)
+        new_r = _m_run_with_style(text, italic=italic, bold=bold, script=script, normal=normal)
+        # 在父元素中替换
+        parent = elem.getparent()
+        if parent is not None:
+            idx = list(parent).index(elem)
+            parent[idx] = new_r
+        return new_r
+    else:
+        for child in list(elem):
+            _apply_style_to_elem(child, style_args)
+        return elem
+
+
+def _try_merge_text_runs(children):
+    """若 children 全为简单 m:r 文本元素，返回合并后的文本；否则返回 None"""
+    texts = []
+    for child in children:
+        if isinstance(child, str):
+            texts.append(child)
+            continue
+        tag = child.tag.split('}')[-1] if '}' in child.tag else child.tag
+        if tag != 'r':
+            return None
+        t_elem = child.find(f'{{{NSM}}}t')
+        if t_elem is None:
+            return None
+        texts.append(t_elem.text or '')
+    return ''.join(texts)
+
+
 class _LatexParser:
     """LaTeX 数学公式递归下降解析器，生成 OMML XML"""
 
-    def __init__(self, latex):
+    def __init__(self, latex, in_env=False, display=False):
         self.s = latex
         self.pos = 0
+        self._in_env = in_env  # 是否在矩阵/环境内，影响 & 和 \\ 的处理
+        self._display = display  # 是否行间公式，影响 \frac 大小
 
     def peek(self):
         if self.pos < len(self.s):
@@ -189,18 +394,177 @@ class _LatexParser:
             buf.append(c)
         return ''.join(buf)
 
+    def _scan_until_end(self, env_name):
+        """扫描原始文本直到匹配的 \\end{env_name}，处理嵌套 \\begin{env_name}。
+
+        返回:
+            原始文本内容（不含 \\begin 和 \\end 标记）
+        """
+        body_chars = []
+        depth = 1
+        while self.pos < len(self.s) and depth > 0:
+            c = self.peek()
+            if c == '\\':
+                saved = self.pos
+                self.consume()  # consume '\'
+                name = self.read_name()
+                if name == 'begin':
+                    inner_env = self.read_required_arg()
+                    if inner_env == env_name:
+                        depth += 1
+                    body_chars.append(f'\\begin{{{inner_env}}}')
+                elif name == 'end':
+                    inner_env = self.read_required_arg()
+                    if inner_env == env_name:
+                        depth -= 1
+                        if depth == 0:
+                            break
+                    body_chars.append(f'\\end{{{inner_env}}}')
+                else:
+                    # 非 begin/end 命令，视为普通内容
+                    body_chars.append('\\' + name)
+                    if self.peek() == '{':
+                        body_chars.append('{' + (self.read_required_arg() or '') + '}')
+            else:
+                body_chars.append(self.consume())
+        return ''.join(body_chars)
+
+    def _parse_environment(self, env_name):
+        """解析 \\begin{env_name}...\\end{env_name} 并生成 OMML 元素
+
+        支持的 environment:
+            - matrix 系列: matrix, bmatrix, pmatrix, vmatrix, Vmatrix
+            - cases: 分段函数
+            - align / align* / aligned: 多行对齐
+
+        返回:
+            OMML XML 元素，或（align 环境）m:oMathPara 元素 / m:oMath 列表
+        """
+        body = self._scan_until_end(env_name)
+
+        if env_name == 'cases':
+            return self._parse_cases_env(body)
+
+        if env_name in _MATRIX_DELIMS:
+            return self._parse_matrix_env(body, env_name)
+
+        # align 环境
+        if env_name in ('align', 'align*', 'aligned'):
+            return self._parse_align_lines(body)
+
+        # 未知环境：回退为文本
+        return _m_run(f'\\begin{{{env_name}}}{body}\\end{{{env_name}}}')
+
+    def _parse_align_lines(self, body):
+        """解析 align 环境体：每行一个公式，& 为对齐点（在 OMML 中移除）
+
+        返回:
+            m:oMathPara 元素（单行时返回 m:oMath）
+        """
+        # 按 \\ 分行
+        raw_lines = body.split('\\\\')
+        omml_lines = []
+        for line in raw_lines:
+            # 移除 & 对齐标记并清理多余空格
+            # 例如: "x + y &= 2" → "x + y = 2"
+            text = re.sub(r'\s*&\s*', '', line).strip()
+            if text:
+                children = _LatexParser(text, in_env=True).parse()
+                omml = _m_elem('oMath')
+                for c in children:
+                    omml.append(c if not isinstance(c, str) else _m_run(c))
+                omml_lines.append(omml)
+
+        if not omml_lines:
+            return _m_run('')
+        if len(omml_lines) == 1:
+            return omml_lines[0]
+        # 多行：m:oMathPara 包裹
+        omp = _m_elem('oMathPara')
+        # 设置段落属性：居中对齐
+        ompPr = _m_elem('oMathParaPr')
+        jc = _m_elem('jc')
+        jc.set(_m_qn('val'), 'center')
+        ompPr.append(jc)
+        omp.append(ompPr)
+        for omml in omml_lines:
+            omp.append(omml)
+        return omp
+
+    def _parse_matrix_env(self, body, env_name):
+        """解析矩阵环境体并生成 OMML 矩阵元素
+
+        body 按 \\\\ 分行，每行按 & 分列，每个单元格用 _LatexParser 解析。
+        """
+        # 按 \\ 分行
+        row_texts = body.split('\\\\')
+        cell_ommls = []
+        for row_text in row_texts:
+            # 每行按 & 分列
+            col_texts = row_text.split('&')
+            row_cells = []
+            for col_text in col_texts:
+                col_text = col_text.strip()
+                if col_text:
+                    cell_children = _LatexParser(col_text, in_env=True).parse()
+                else:
+                    cell_children = []
+                row_cells.append(cell_children)
+            if row_cells:
+                cell_ommls.append(row_cells)
+
+        if not cell_ommls:
+            return _m_run('')
+
+        left_delim, right_delim = _MATRIX_DELIMS[env_name]
+        return _build_matrix(cell_ommls, left_delim, right_delim)
+
+    def _parse_cases_env(self, body):
+        """解析 cases 环境体：左花括号定界符 + 内部矩阵
+
+        每行格式: 表达式 & 条件
+        """
+        row_texts = body.split('\\\\')
+        cell_ommls = []
+        for row_text in row_texts:
+            col_texts = row_text.split('&')
+            row_cells = []
+            for col_text in col_texts:
+                col_text = col_text.strip()
+                if col_text:
+                    cell_children = _LatexParser(col_text, in_env=True).parse()
+                else:
+                    cell_children = []
+                row_cells.append(cell_children)
+            # 确保每行至少 2 列（cases 格式）
+            while len(row_cells) < 2:
+                row_cells.append([])
+            if row_cells:
+                cell_ommls.append(row_cells)
+
+        if not cell_ommls:
+            return _m_run('')
+
+        # cases: 左花括号，无右定界符（设空字符串禁用默认配对标点）
+        return _build_matrix(cell_ommls, '{', '')
+
     def parse_expr(self):
-        """解析表达式：term*"""
+        """解析表达式：term*。环境内遇到 & 或 \\\\ 时停止。"""
         children = []
         while self.pos < len(self.s):
             c = self.peek()
             if c is None or c == '}':
                 break
-            if c == '&':  # 矩阵列分隔
+            if c == '&':  # 环境内的列分隔，停止解析
+                if self._in_env:
+                    break
                 self.consume()
                 children.append(_m_run('&'))
                 continue
-            if c == '\\\\':  # 矩阵行分隔
+            if c == '\\' and self.pos + 1 < len(self.s) and self.s[self.pos + 1] == '\\':
+                # \\ 行分隔：环境内停止，环境外当文本
+                if self._in_env:
+                    break
                 self.consume()
                 self.consume()
                 children.append(_m_run('\\\\'))
@@ -317,6 +681,10 @@ class _LatexParser:
             self.expect('}')  # consume closing brace if present
             if len(children) == 1:
                 return children[0]
+            # 多子元素时检查是否全为普通文本 run，若是则合并避免冗余 m:d 包装
+            merged_text = _try_merge_text_runs(children)
+            if merged_text is not None:
+                return _m_run(merged_text)
             return _m_wrap_d(children)
 
         # LaTeX 命令 \
@@ -329,6 +697,17 @@ class _LatexParser:
             if self.peek() in (' ', '\t', '\n'):
                 return _m_run(' ')
 
+            # LaTeX 间距字符: \, \! \: \;
+            if self.peek() == ',':
+                self.consume()
+                return _m_run(' ')  # thin space U+2009
+            if self.peek() == '!':
+                self.consume()
+                return _m_run('')  # negative thin space
+            if self.peek() == ':':
+                self.consume()
+                return _m_run(' ')  # medium space (en space)
+
             name = self.read_name()
             if not name:
                 # 转义字符如 \$ \# \% \& \_ \{ \}
@@ -337,8 +716,115 @@ class _LatexParser:
                     return _m_run(esc)
                 return _m_run('\\')
 
+            # 环境: \begin{env} ... \end{env}
+            if name == 'begin':
+                env_name = self.read_required_arg()
+                if env_name:
+                    return self._parse_environment(env_name)
+                return _m_run('\\begin{}')
+            if name == 'end':
+                # \end{env} 由 _parse_environment 处理，不应直接出现在 parse_atom 中
+                # 如果出现（解析异常），回退为文本
+                env_name = self.read_required_arg()
+                return _m_run(f'\\end{{{env_name or ""}}}')
+
+            # 字体样式 \mathbf{}, \mathbb{}, \mathcal{} 等
+            if name in _FONT_STYLES:
+                arg_text = self.read_required_arg()
+                if arg_text is not None:
+                    style_args = _FONT_STYLES[name]
+                    # 解析参数内容
+                    inner_children = _LatexParser(arg_text).parse()
+                    # 对每个结果元素应用样式
+                    styled = []
+                    for child in inner_children:
+                        if isinstance(child, str):
+                            styled.append(child)
+                        else:
+                            styled.append(_apply_style_to_elem(child, style_args))
+                    if len(styled) == 1 and not isinstance(styled[0], str):
+                        return styled[0]
+                    # 尝试合并纯文本 run，避免多余 m:d 包装
+                    merged = _try_merge_text_runs(styled)
+                    if merged is not None:
+                        # 用合并后的文本 + 相同样式重新生成
+                        italic = not style_args.get('normal', False) and style_args.get('italic', True)
+                        return _m_run_with_style(merged, italic=italic,
+                                                 bold=style_args.get('bold', False),
+                                                 script=style_args.get('script'),
+                                                 normal=style_args.get('normal', False))
+                    return _m_wrap_d(styled)
+                return _m_run('\\' + name + '{}')
+
+            # 间距命令 \, \! \quad \qquad \enspace
+            if name == ',' or name == 'thinspace':
+                return _m_run(' ')  # thin space U+2009
+            if name == '!' or name == 'negthinspace':
+                return _m_run('')  # 零宽负间距
+            if name == 'quad':
+                return _m_run(' ')  # em space U+2003
+            if name == 'qquad':
+                return _m_run('  ')  # 2em
+            if name == 'enspace':
+                return _m_run(' ')  # en space U+2002
+
+            # 扩展重音 \overrightarrow{...} \overleftarrow{...}
+            if name == 'overrightarrow':
+                body = self.read_required_arg()
+                if body is not None:
+                    acc = _m_elem('acc')
+                    accPr = _m_elem('accPr')
+                    chr_elem = _m_elem('chr')
+                    chr_elem.set(_m_qn('val'), '→')
+                    accPr.append(chr_elem)
+                    acc.append(accPr)
+                    e = _m_elem('e')
+                    e.append(_m_run(body))
+                    acc.append(e)
+                    return acc
+                return _m_run('\\overrightarrow{}')
+            if name == 'overleftarrow':
+                body = self.read_required_arg()
+                if body is not None:
+                    acc = _m_elem('acc')
+                    accPr = _m_elem('accPr')
+                    chr_elem = _m_elem('chr')
+                    chr_elem.set(_m_qn('val'), '←')
+                    accPr.append(chr_elem)
+                    acc.append(accPr)
+                    e = _m_elem('e')
+                    e.append(_m_run(body))
+                    acc.append(e)
+                    return acc
+                return _m_run('\\overleftarrow{}')
+
+            # 颜色命令（简化处理：转为普通文本，颜色属性在 OMML 中支持有限）
+            # \textcolor{color}{text} → 忽略颜色，保留文本
+            if name == 'textcolor':
+                color_name = self.read_required_arg()
+                text_arg = self.read_required_arg()
+                if text_arg is not None:
+                    return _m_text_run(text_arg)
+                return _m_run('\\textcolor{}{}')
+            if name == 'color':
+                # \color{name} 设置后续颜色，无法精确映射到 OMML，忽略
+                _ = self.read_required_arg()
+                return _m_run('')  # 忽略颜色标记
+
             # n-ary 大运算符（sum, prod, int 等）
             if name in BIG_OPS:
+                # 先检查是否有下上限
+                saved = self.pos
+                has_limits = False
+                self.skip_spaces()
+                if self.peek() == '_' or self.peek() == '^':
+                    has_limits = True
+                self.pos = saved  # 回退
+
+                # 无上下限：直接输出 Unicode 字符，避免 m:nary 占位符
+                if not has_limits:
+                    return _m_run(BIG_OPS[name])
+
                 nary = _m_elem('nary')
                 naryPr = _m_elem('naryPr')
                 chr_elem = _m_elem('chr')
@@ -349,9 +835,14 @@ class _LatexParser:
                 naryPr.append(limLoc)
                 nary.append(naryPr)
 
+                # 记录是否有上下限，无则隐藏占位符
+                has_sub = False
+                has_sup = False
+
                 # 读取下上限
                 if self.peek() == '_':
                     self.consume()
+                    has_sub = True
                     sub_arg = self.parse_atom()
                     if sub_arg is not None:
                         sub = _m_elem('sub')
@@ -360,11 +851,22 @@ class _LatexParser:
 
                 if self.peek() == '^':
                     self.consume()
+                    has_sup = True
                     sup_arg = self.parse_atom()
                     if sup_arg is not None:
                         sup = _m_elem('sup')
                         sup.append(sup_arg if not isinstance(sup_arg, str) else _m_run(sup_arg))
                         nary.append(sup)
+
+                # 无上下限时隐藏占位符
+                if not has_sub:
+                    subHide = _m_elem('subHide')
+                    subHide.set(_m_qn('val'), '1')
+                    naryPr.append(subHide)
+                if not has_sup:
+                    supHide = _m_elem('supHide')
+                    supHide.set(_m_qn('val'), '1')
+                    naryPr.append(supHide)
 
                 e = _m_elem('e')
                 # 读取 integrand / summand
@@ -375,12 +877,21 @@ class _LatexParser:
                 nary.append(e)
                 return nary
 
-            # 分数 \frac{num}{den}
-            if name == 'frac':
+            # 分数 \frac{num}{den} 及展示变体 \dfrac \tfrac
+            if name in ('frac', 'dfrac', 'tfrac'):
                 num_text = self.read_required_arg()
                 den_text = self.read_required_arg()
                 if num_text is not None and den_text is not None:
                     f = _m_elem('f')
+                    # fPr: 分数类型区分显示/行内/小分数
+                    fPr = _m_elem('fPr')
+                    type_elem = _m_elem('type')
+                    if name == 'dfrac' or (name == 'frac' and self._display):
+                        type_elem.set(_m_qn('val'), 'bar')   # 显示分数（大）
+                    elif name == 'tfrac' or name == 'frac':
+                        type_elem.set(_m_qn('val'), 'skw')   # 小分数（行内）
+                    fPr.append(type_elem)
+                    f.append(fPr)
                     num = _m_elem('num')
                     num_parsed = _LatexParser(num_text).parse_expr()
                     for item in num_parsed:
@@ -409,6 +920,13 @@ class _LatexParser:
                     deg.append(_m_run(deg_text))
                 if deg is not None:
                     rad.append(deg)
+                else:
+                    # 无 [n] 时隐藏 degree 占位符（Word 默认显示空位）
+                    radPr = _m_elem('radPr')
+                    degHide = _m_elem('degHide')
+                    degHide.set(_m_qn('val'), '1')
+                    radPr.append(degHide)
+                    rad.append(radPr)
                 e = _m_elem('e')
                 body = self.read_required_arg()
                 if body is not None:
@@ -446,11 +964,13 @@ class _LatexParser:
             # 定界符 \left( \right) \left[ \right] 等
             if name == 'left':
                 delim_char = self.consume()
-                # 暂时用 d 包装，标记左定界符
+                # 处理 \left. （不可见定界符）
+                if delim_char == '.':
+                    delim_char = ''
                 d = _m_elem('d')
                 dPr = _m_elem('dPr')
                 begChr = _m_elem('begChr')
-                begChr.set(_m_qn('val'), delim_char or '(')
+                begChr.set(_m_qn('val'), delim_char or '')
                 dPr.append(begChr)
                 d.append(dPr)
                 # 读取直到 \right
@@ -462,8 +982,10 @@ class _LatexParser:
                         name2 = self.read_name()
                         if name2 == 'right':
                             right_delim = self.consume()
+                            if right_delim == '.':
+                                right_delim = ''
                             endChr = _m_elem('endChr')
-                            endChr.set(_m_qn('val'), right_delim or ')')
+                            endChr.set(_m_qn('val'), right_delim or '')
                             dPr.append(endChr)
                             break
                         else:
@@ -472,9 +994,12 @@ class _LatexParser:
                             body.append(self.parse_term())
                     else:
                         body.append(self.parse_term())
+                # 内容必须包在 m:e 中
+                e = _m_elem('e')
                 for b in body:
                     if b is not None:
-                        d.append(b if not isinstance(b, str) else _m_run(b))
+                        e.append(b if not isinstance(b, str) else _m_run(b))
+                d.append(e)
                 return d
 
             # 花括号（literal braces via \{ \}）
@@ -516,8 +1041,14 @@ def latex_to_omml(latex, display=False):
     返回:
         OMML 顶级元素（m:oMath 或 m:oMathPara），可直接插入段落 XML
     """
-    parser = _LatexParser(latex)
+    parser = _LatexParser(latex, display=display)
     children = parser.parse()
+
+    # 如果解析结果已经有 m:oMathPara（align 环境），直接返回
+    if len(children) == 1:
+        child = children[0]
+        if hasattr(child, 'tag') and child.tag == f'{{{NSM}}}oMathPara':
+            return child
 
     omml = _m_elem('oMath')
     for c in children:
@@ -723,21 +1254,32 @@ def set_outline_level(paragraph, level):
 def split_inline_math(text):
     r"""分割段落文本中的行内公式 $...$，返回 segment 列表。
     每个 segment: {'type': 'text'|'math', 'content': str}
-    支持 \$ 转义，不支持嵌套。
+    支持 \$ 转义（在公式内容和普通文本中），不支持嵌套。
+    使用字符扫描器而非正则，正确处理 \$ 内部 $。
     """
     if not text:
         return [{'type': 'text', 'content': text}]
     segments = []
-    # 匹配 $...$ 但不匹配 $$
-    pattern = re.compile(r'(?<!\\)\$([^$]+?)(?<!\\)\$')
-    last_end = 0
-    for m in pattern.finditer(text):
-        if m.start() > last_end:
-            segments.append({'type': 'text', 'content': text[last_end:m.start()]})
-        segments.append({'type': 'math', 'content': m.group(1)})
-        last_end = m.end()
-    if last_end < len(text):
-        segments.append({'type': 'text', 'content': text[last_end:]})
+    i = 0
+    last = 0
+    while i < len(text):
+        # 只匹配非转义的 $ 作为定界符
+        if text[i] == '$' and (i == 0 or text[i - 1] != '\\'):
+            # 找匹配的闭合 $
+            j = i + 1
+            while j < len(text):
+                if text[j] == '$' and text[j - 1] != '\\':
+                    # 找到闭合
+                    if i > last:
+                        segments.append({'type': 'text', 'content': text[last:i]})
+                    segments.append({'type': 'math', 'content': text[i + 1:j]})
+                    last = j + 1
+                    i = j
+                    break
+                j += 1
+        i += 1
+    if last < len(text):
+        segments.append({'type': 'text', 'content': text[last:]})
     return segments if segments else [{'type': 'text', 'content': text}]
 
 
@@ -1125,6 +1667,27 @@ def generate_docx(nodes, output_path, title_text=None):
 
         elif t == 'display_math':
             # 行间公式：上下各空一行，公式居中，编号右对齐
+            try:
+                omml = latex_to_omml(node['text'], display=True)
+            except Exception:
+                omml = None
+
+            # 多行公式（align 环境返回 m:oMathPara）：同一段落，m:oMath 用 <w:br/> 分隔
+            if omml is not None and omml.tag == f'{{{NSM}}}oMathPara':
+                add_empty_para(doc)
+                p_align = doc.add_paragraph()
+                p_align.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                lines = list(omml)  # m:oMath 子元素
+                for idx, line_omml in enumerate(lines):
+                    if idx > 0:
+                        # 行间插入换行符
+                        br_run = p_align.add_run()
+                        br = OxmlElement('w:br')
+                        br_run._r.append(br)
+                    p_align._element.append(line_omml)
+                add_empty_para(doc)
+                continue
+
             add_empty_para(doc)
             p = doc.add_paragraph()
             # 设置段落 tab stops：居中 + 右对齐
@@ -1146,10 +1709,9 @@ def generate_docx(nodes, output_path, title_text=None):
             tab1 = OxmlElement('w:tab')
             run_t1._r.append(tab1)
             # 插入 OMML 行内公式（m:oMath 在 w:r 同级参与排版）
-            try:
-                omml = latex_to_omml(node['text'], display=False)
+            if omml is not None:
                 p._element.append(omml)
-            except Exception:
+            else:
                 run_fb = p.add_run(node['text'])
                 set_run_font(run_fb, '宋体', en_font='Times New Roman', size_pt=10.5)
                 run_fb.font.italic = True
