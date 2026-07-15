@@ -4,6 +4,7 @@
 __pycache__/
 *.pyc
 .venv/
+venv/
 .DS_Store
 node_modules/
 # Skill evals are part of the project — do NOT ignore
