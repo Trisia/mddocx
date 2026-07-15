@@ -36,10 +36,22 @@ jobs:
       - name: Package source
         run: zip -r mddocx.zip . -x ".git/*" "__pycache__/*" ".venv/*"
 
-      - name: Publish to npm
-        run: npm publish --access public
+      - name: Set npm registry auth
+        run: echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Debug npm config
+        run: |
+          echo "=== npm config ==="
+          npm config list
+          echo "=== registry ==="
+          npm config get registry
+          echo "=== .npmrc ==="
+          cat ~/.npmrc || echo "no .npmrc"
+
+      - name: Publish to npm
+        run: npm publish --access public --registry https://registry.npmjs.org
 
       - name: Publish to ClawHub
         run: npx clawhub sync --all --source-repo ${{ github.repository }} --source-commit ${{ github.sha }} --source-ref ${{ github.ref_name }}
