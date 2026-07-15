@@ -5,7 +5,7 @@
   "type": "module",
   "main": ".opencode/plugins/mddocx.js",
   "bin": {
-    "mddocx": "./bin/mddocx.js"
+    "mddocx": "bin/mddocx.js"
   },
   "files": [
     "skills/",
@@ -16,10 +16,21 @@
     ".cursor-plugin/",
     "hooks/"
   ],
-  "keywords": ["markdown", "docx", "academic", "claude-code", "codex", "opencode", "skill"],
+  "keywords": [
+    "markdown",
+    "docx",
+    "academic",
+    "claude-code",
+    "codex",
+    "opencode",
+    "skill"
+  ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/Trisia/mddocx"
+    "url": "git+https://github.com/Trisia/mddocx.git"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
 }
