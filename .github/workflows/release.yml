@@ -43,9 +43,9 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish to ClawHub
-        run: npx clawhub sync --all --source-repo ${{ github.repository }} --source-commit ${{ github.sha }} --source-ref ${{ github.ref_name }}
-        env:
-          CLAWHUB_TOKEN: ${{ secrets.CLAWHUB_TOKEN }}
+        run: |
+          npx clawhub login --token ${{ secrets.CLAWHUB_TOKEN }}
+          npx clawhub sync --all --source-repo ${{ github.repository }} --source-commit ${{ github.sha }} --source-ref ${{ github.ref_name }}
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
