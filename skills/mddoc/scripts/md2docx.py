@@ -906,6 +906,7 @@ def generate_docx(nodes, output_path, title_text=None):
 
     # --- 计数器 ---
     chapter_path = [1]  # 一级标题序号
+    has_chapter = False  # 是否遇到章标题（# 一级标题）
     fig_counter = {}  # key: chapter index tuple, value: counter
     tab_counter = {}
     eq_counter = {}
@@ -929,10 +930,14 @@ def generate_docx(nodes, output_path, title_text=None):
         return eq_counter[key]
 
     def make_fig_label():
-        return f"图{chapter_path[0]}-{incr_fig()}"
+        if has_chapter:
+            return f"图{chapter_path[0]}-{incr_fig()}"
+        return f"图{incr_fig()}"
 
     def make_tab_label():
-        return f"表{chapter_path[0]}-{incr_tab()}"
+        if has_chapter:
+            return f"表{chapter_path[0]}-{incr_tab()}"
+        return f"表{incr_tab()}"
 
     # --- 遍历节点生成内容 ---
     for node in nodes:
@@ -950,6 +955,7 @@ def generate_docx(nodes, output_path, title_text=None):
             lv = node['level']
             if lv == 1:
                 # 一级标题：新页 + 三号黑体居中
+                has_chapter = True
                 chapter_path[0] += 1
                 chapter_path[1:] = [0]  # reset sub-levels
 
@@ -1017,6 +1023,9 @@ def generate_docx(nodes, output_path, title_text=None):
             run_img.add_picture(img_path, width=w)
 
             # 图题：小五宋体加粗居中
+            # alt 为空时，使用图片文件名（不含扩展名）作为默认图题
+            if not alt:
+                alt = os.path.splitext(os.path.basename(url))[0]
             p_cap = doc.add_paragraph()
             p_cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
             run_cap = p_cap.add_run(f'{make_fig_label()} {alt}')
