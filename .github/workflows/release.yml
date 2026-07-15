@@ -24,8 +24,8 @@ jobs:
       - name: Smoke test — convert demo
         run: python skills/mddoc/scripts/md2docx.py examples/demo.md -o /tmp/test.docx
 
-      - name: Package skill (.skill)
-        run: cd skills && zip -r ../mddoc.skill mddoc/
+      - name: Package skill (.zip)
+        run: cd skills && zip -r ../mddoc.skill.zip mddoc/
 
       - name: Package source
         run: zip -r mddocx.zip . -x ".git/*" "__pycache__/*" ".venv/*"
@@ -34,7 +34,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            mddoc.skill
+            mddoc.skill.zip
             mddocx.zip
           generate_release_notes: true
         env:

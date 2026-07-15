@@ -1,6 +1,6 @@
 {
   "name": "mddocx",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Markdown 转学术格式 Word 文档 (DOCX)。支持三线表、图题/表题自动编号、页码、页眉等学术论文排版规范。",
   "author": { "name": "Quan Guanyu" },
   "keywords": ["markdown", "docx", "word", "academic", "论文", "学术", "转换"],

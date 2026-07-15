@@ -566,8 +566,40 @@ def add_empty_para(doc):
 # ============================================================
 
 def download_image(url):
-    """下载图片到临时文件，返回路径。失败返回 None"""
+    """下载或复制图片到临时文件，返回路径。失败返回 None。
+
+    支持：
+    - HTTP/HTTPS URL：requests 下载
+    - 本地文件路径：直接复制到临时文件
+    - base64 data URI：解码保存
+    """
     import requests
+    import shutil
+
+    # 1. 本地文件路径（相对于工作目录的路径）
+    if os.path.exists(url):
+        suffix = os.path.splitext(url)[1] or '.png'
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+        shutil.copy2(url, tmp.name)
+        tmp.close()
+        return tmp.name
+
+    # 2. base64 data URI
+    if url.startswith('data:'):
+        import base64
+        # 格式: data:image/png;base64,xxxx 或 data:image/png,xxxx
+        header, data = url.split(',', 1)
+        is_base64 = ';base64' in header
+        suffix = '.png'
+        mime_match = re.match(r'data:image/(\w+)', header)
+        if mime_match:
+            suffix = '.' + mime_match.group(1)
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+        tmp.write(base64.b64decode(data) if is_base64 else data.encode())
+        tmp.close()
+        return tmp.name
+
+    # 3. HTTP/HTTPS URL
     headers = {'User-Agent': 'Mozilla/5.0 (compatible; mddoc-converter/1.0)'}
     try:
         resp = requests.get(url, headers=headers, timeout=30)
