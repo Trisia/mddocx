@@ -130,6 +130,62 @@ pip install python-docx Pillow requests mistune
 
 ---
 
+## 升级
+
+### npm（全平台通用）
+
+```bash
+npm update -g @cliven/mddocx       # 全局安装升级
+npx @cliven/mddocx@latest          # npx 始终使用最新版
+```
+
+### Claude Code
+
+```bash
+# 插件方式 → git pull
+cd ~/.claude/plugins/mddocx && git pull
+
+# 仅技能 → 重新复制
+git clone https://github.com/Trisia/mddocx /tmp/mddocx
+cp -rf /tmp/mddocx/skills/mddoc ~/.claude/skills/mddoc
+rm -rf /tmp/mddocx
+```
+
+### Codex
+
+```bash
+cd ~/.codex/plugins/mddocx && git pull
+# 或
+/plugin update mddocx
+```
+
+### OpenCode
+
+重启 OpenCode 即可自动拉取插件最新版本。或手动：
+
+```bash
+# 删除缓存后重启
+rm -rf ~/.opencode/plugins/mddocx
+```
+
+### Cursor
+
+```bash
+cd ~/.cursor/plugins/mddocx && git pull
+# 或重新克隆
+git clone https://github.com/Trisia/mddocx /tmp/mddocx
+cp -rf /tmp/mddocx/skills/mddoc ~/.cursor/skills/mddoc
+rm -rf /tmp/mddocx
+```
+
+### Python 依赖
+
+```bash
+pip install --upgrade python-docx Pillow requests mistune
+```
+
+---
+
 ## 依赖
 
 所有平台均需 Python 依赖：

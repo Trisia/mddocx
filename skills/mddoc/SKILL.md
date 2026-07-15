@@ -1,5 +1,6 @@
 ---
 name: mddoc
+version: 1.0.5
 description: 将 Markdown 内容转换为特定学术格式的 Word 文档 (.docx)。当用户想要将 Markdown 文件、粘贴的 Markdown 文本转换为格式化的 docx 文档时使用，特别是学术论文、技术报告、毕业论文等需要严格格式要求的场景。触发词包括：/mddoc、markdown转docx、md转word、生成格式化文档、学术格式转换。即使用户只说"把这个转成word"而内容是Markdown，也应使用此技能。
 ---
 
@@ -8,8 +9,13 @@ description: 将 Markdown 内容转换为特定学术格式的 Word 文档 (.doc
 ## 快速开始
 
 ```bash
-# 安装依赖（仅首次）
+# 首次使用：创建虚拟环境并安装依赖
+python3 -m venv .venv
+source .venv/bin/activate
 pip install python-docx Pillow requests mistune
+
+# 后续使用：直接激活虚拟环境
+source .venv/bin/activate
 
 # 转换 Markdown 文件 → 输出到同目录
 python <skill-path>/scripts/md2docx.py paper.md
@@ -26,7 +32,10 @@ python <skill-path>/scripts/md2docx.py --text "# 标题\n\n正文内容" -o out.
 ## 工作流程
 
 1. **读取输入** — 若用户粘贴 Markdown 文本则直接读取；若用户提供文件路径（含 `@` 引用）则读取该文件
-2. **安装依赖**（如未安装）— `pip install python-docx Pillow requests mistune`
+2. **检查并准备环境** — 按以下顺序检查，命中即跳过后续步骤：
+   - 若 `.venv/bin/python` 存在且能 `import docx, PIL, requests, mistune` → 直接使用
+   - 若 `.venv` 存在但缺依赖 → `source .venv/bin/activate && pip install python-docx Pillow requests mistune`
+   - 若 `.venv` 不存在 → `python3 -m venv .venv && source .venv/bin/activate && pip install python-docx Pillow requests mistune`
 3. **执行转换** — 优先使用内置脚本 `scripts/md2docx.py`；若 Markdown 结构特殊则参照下方格式规范编写自定义脚本
 4. **确定输出** — 文件路径输入→同目录；粘贴内容→当前目录；文件名=「题目.docx」（题目从第一个 `# 标题` 提取；若无 `#` 标题则使用输入文件名，`--text` 模式为「未命名文档.docx」）
 5. **验证** — 检查 outline level、图片嵌入、页眉、分页符
