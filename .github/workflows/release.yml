@@ -10,7 +10,6 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    environment: RELEASE_CI
     steps:
       - uses: actions/checkout@v4
 
@@ -18,12 +17,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          registry-url: 'https://registry.npmjs.org'
 
       - name: Install Python dependencies
         run: pip install python-docx Pillow requests mistune
@@ -37,15 +30,57 @@ jobs:
       - name: Package source
         run: zip -r mddocx.zip . -x ".git/*" "__pycache__/*" ".venv/*"
 
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: packages
+          path: |
+            mddoc.skill.zip
+            mddocx.zip
+
+  npm-publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: RELEASE_CI
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
       - name: Publish to npm
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+  clawhub-publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: RELEASE_CI
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       - name: Publish to ClawHub
         run: |
           npx clawhub login --token ${{ secrets.CLAWHUB_TOKEN }}
           npx clawhub sync --all --source-repo ${{ github.repository }} --source-commit ${{ github.sha }} --source-ref ${{ github.ref_name }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: packages
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
