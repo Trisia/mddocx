@@ -1550,13 +1550,24 @@ def generate_docx(nodes, output_path, title_text=None):
                 run = p.add_run(node['text'])
                 set_run_font(run, '黑体', size_pt=14, bold=False)
 
-            elif lv >= 3:
+            elif lv == 3:
                 # 三级标题：小四宋体不加粗，首行缩进同正文，上下不空行
                 p = doc.add_paragraph()
-                set_outline_level(p, min(lv, 3))
+                set_outline_level(p, 3)
                 p.paragraph_format.first_line_indent = Pt(21)
                 run = p.add_run(node['text'])
                 set_run_font(run, '宋体', size_pt=12, bold=False)
+
+            elif lv >= 4:
+                # 四级及以上标题：格式同正文（五号宋体），但设置对应 outline_level
+                p = doc.add_paragraph()
+                set_outline_level(p, lv)
+                p.paragraph_format.first_line_indent = Pt(21)
+                p.paragraph_format.line_spacing = 1.3
+                p.paragraph_format.space_before = Pt(0)
+                p.paragraph_format.space_after = Pt(0)
+                run = p.add_run(node['text'])
+                set_run_font(run, '宋体', size_pt=10.5, bold=False)
 
         elif t == 'para':
             p = doc.add_paragraph()
@@ -1660,10 +1671,19 @@ def generate_docx(nodes, output_path, title_text=None):
             add_empty_para(doc)
 
         elif t == 'code':
+            add_empty_para(doc)
             p = doc.add_paragraph()
             p.paragraph_format.left_indent = Cm(1)
+            # 灰色背景
+            pPr = p._element.get_or_add_pPr()
+            shd = OxmlElement('w:shd')
+            shd.set(qn('w:val'), 'clear')
+            shd.set(qn('w:color'), 'auto')
+            shd.set(qn('w:fill'), 'D9D9D9')
+            pPr.append(shd)
             run = p.add_run(node['text'])
-            set_run_font(run, '宋体', en_font='Courier New', size_pt=10.5)
+            set_run_font(run, '宋体', en_font='Times New Roman', size_pt=10.5)
+            add_empty_para(doc)
 
         elif t == 'display_math':
             # 行间公式：上下各空一行，公式居中，编号右对齐

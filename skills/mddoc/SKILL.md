@@ -1,6 +1,6 @@
 ---
 name: mddoc
-version: 1.0.5
+version: 1.0.6
 description: 将 Markdown 内容转换为特定学术格式的 Word 文档 (.docx)。当用户想要将 Markdown 文件、粘贴的 Markdown 文本转换为格式化的 docx 文档时使用，特别是学术论文、技术报告、毕业论文等需要严格格式要求的场景。触发词包括：/mddoc、markdown转docx、md转word、生成格式化文档、学术格式转换。即使用户只说"把这个转成word"而内容是Markdown，也应使用此技能。
 ---
 
@@ -177,6 +177,21 @@ run = p.add_run(text)
 set_cn_font(run, '宋体', size_pt=12, bold=False)
 ```
 
+### 四级及以上标题（`####`、`#####`、`######`）
+
+格式与正文相同（五号宋体 10.5pt、首行缩进Pt(21)、1.3倍行距），但设置对应的 outline_level（4/5/6）。上下不空行。
+
+```python
+p = doc.add_paragraph()
+set_outline(p, level)  # 4、5 或 6，按实际标题层级
+p.paragraph_format.first_line_indent = Pt(21)
+p.paragraph_format.line_spacing = 1.3
+p.paragraph_format.space_before = Pt(0)
+p.paragraph_format.space_after = Pt(0)
+run = p.add_run(text)
+set_cn_font(run, '宋体', size_pt=10.5, bold=False)
+```
+
 ### 正文段落
 
 五号(10.5pt)宋体/TNR、首行缩进Pt(21)、1.3倍行距、段前段后0磅。
@@ -324,13 +339,22 @@ for item in items:
 
 ### 代码块
 
-Courier New 等宽字体、五号、左缩进。
+Times New Roman 字体、五号、左缩进、灰色背景(#D9D9D9)、上下各空一行。
 
 ```python
+add_empty(doc)
 p = doc.add_paragraph()
 p.paragraph_format.left_indent = Cm(1)
+# 灰色背景
+pPr = p._element.get_or_add_pPr()
+shd = OxmlElement('w:shd')
+shd.set(qn('w:val'), 'clear')
+shd.set(qn('w:color'), 'auto')
+shd.set(qn('w:fill'), 'D9D9D9')
+pPr.append(shd)
 run = p.add_run(code)
-set_cn_font(run, '宋体', en_name='Courier New', size_pt=10.5)
+set_cn_font(run, '宋体', en_name='Times New Roman', size_pt=10.5)
+add_empty(doc)
 ```
 
 ### 行内公式（`$...$`）
@@ -483,6 +507,7 @@ set_cn_font(run_cont, '宋体', size_pt=10.5)
 - [ ] 一级标题：16pt黑体、outline_level=1、前有分页符、上下各空一行
 - [ ] 二级标题：14pt黑体、顶格、outline_level=2、不加粗、**上下不空行**
 - [ ] 三级标题：12pt宋体、首行缩进Pt(21)、outline_level=3、不加粗、**上下不空行**
+- [ ] 四级及以上标题：10.5pt宋体同正文、首行缩进Pt(21)、outline_level=对应层级(4/5/6)、**上下不空行**
 - [ ] 正文：10.5pt、首行缩进Pt(21)、1.3倍行距、**段落间不空行**
 - [ ] 图片：嵌入、等比缩放8-12cm、居中、上下各空一行
 - [ ] 图题：9pt宋体加粗居中、图片下方
@@ -490,6 +515,7 @@ set_cn_font(run_cont, '宋体', size_pt=10.5)
 - [ ] 表头行：居中、9pt、无缩进、tblHeader重复
 - [ ] 表题：10.5pt宋体加粗居中、表格上方
 - [ ] 列表：有序用（1）（2）（3）、无序用•、首行缩进
+- [ ] 代码块：Times New Roman、左缩进、灰色背景#D9D9D9、上下各空一行
 - [ ] 页眉：左"xxxxx"右题目、9pt黑体
 - [ ] 行内公式：$...$ 嵌于段落、OMML格式、WPS/Word可渲染
 - [ ] 行间公式：$$...$$ OMML居中、上下各空一行、编号(章-序号)右对齐、括号宋体数字TNR
