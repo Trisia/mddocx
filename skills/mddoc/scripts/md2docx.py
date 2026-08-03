@@ -1449,9 +1449,11 @@ def _ensure_list_numbering_defs(doc):
     参数：
         doc: python-docx Document 对象
     """
-    # 使用不与 Word 默认模板冲突的 numId
+    # 使用不与 Word 默认模板冲突的 numId 和 abstractNumId
     ORDERED_NUM_ID = '50'
+    ORDERED_ABSTRACT_ID = '50'
     UNORDERED_NUM_ID = '51'
+    UNORDERED_ABSTRACT_ID = '51'
 
     numbering_part = doc.part.numbering_part
     numbering_elem = numbering_part._element
@@ -1465,9 +1467,9 @@ def _ensure_list_numbering_defs(doc):
     # 缩进量：Pt(21) = 420 twips，每级增加 420 twips
     BASE_INDENT = 420  # twips = Pt(21)
 
-    # 抽象编号 0：有序列表 (1, 2, 3..., a, b, c..., i, ii, iii...)
+    # 抽象编号 50：有序列表 (1, 2, 3..., a, b, c..., i, ii, iii...)
     abs_ord = OxmlElement('w:abstractNum')
-    abs_ord.set(qn('w:abstractNumId'), '0')
+    abs_ord.set(qn('w:abstractNumId'), ORDERED_ABSTRACT_ID)
     ord_fmts = [('decimal', '%1.'), ('lowerLetter', '%2)'), ('lowerRoman', '%3.')]
     for ilvl_val, (fmt, lvl_text) in enumerate(ord_fmts):
         lvl = OxmlElement('w:lvl')
@@ -1494,9 +1496,9 @@ def _ensure_list_numbering_defs(doc):
         abs_ord.append(lvl)
     numbering_elem.append(abs_ord)
 
-    # 抽象编号 1：无序列表 (•, ◦, ▪)
+    # 抽象编号 51：无序列表 (•, ◦, ▪)
     abs_unord = OxmlElement('w:abstractNum')
-    abs_unord.set(qn('w:abstractNumId'), '1')
+    abs_unord.set(qn('w:abstractNumId'), UNORDERED_ABSTRACT_ID)
     bull_chars = ['•', '◦', '▪']
     for ilvl_val, bull_char in enumerate(bull_chars):
         lvl = OxmlElement('w:lvl')
@@ -1527,7 +1529,7 @@ def _ensure_list_numbering_defs(doc):
     num_ord = OxmlElement('w:num')
     num_ord.set(qn('w:numId'), ORDERED_NUM_ID)
     absRef_ord = OxmlElement('w:abstractNumId')
-    absRef_ord.set(qn('w:val'), '0')
+    absRef_ord.set(qn('w:val'), ORDERED_ABSTRACT_ID)
     num_ord.append(absRef_ord)
     numbering_elem.append(num_ord)
 
@@ -1535,7 +1537,7 @@ def _ensure_list_numbering_defs(doc):
     num_unord = OxmlElement('w:num')
     num_unord.set(qn('w:numId'), UNORDERED_NUM_ID)
     absRef_unord = OxmlElement('w:abstractNumId')
-    absRef_unord.set(qn('w:val'), '1')
+    absRef_unord.set(qn('w:val'), UNORDERED_ABSTRACT_ID)
     num_unord.append(absRef_unord)
     numbering_elem.append(num_unord)
 
@@ -1575,8 +1577,7 @@ def _render_list(doc, node, depth=0):
             continue
 
         p = doc.add_paragraph()
-        # 遵守正文段落设定：首行缩进 2 字符，1.3 倍行距
-        set_first_line_indent_chars(p, 2)
+        # 列表缩进由 numbering 定义控制（w:ind），段落本身不设缩进
         p.paragraph_format.line_spacing = 1.3
         p.paragraph_format.space_before = Pt(0)
         p.paragraph_format.space_after = Pt(0)
@@ -1593,19 +1594,18 @@ def _render_list(doc, node, depth=0):
                 _render_list(doc, child, depth=depth + 1)
 
 
-def _render_table(doc, node, caption, tab_counter, chapter_path, has_chapter):
-    """渲染三线表，适配 mistune table AST
+def _render_table(doc, node, tab_counter, chapter_path, has_chapter):
+    """渲染三线表，适配 mistune table AST。
+    表题文本使用表格第一列表头（与原来行为一致）。
 
     参数：
         doc: Document 对象
         node: mistune table AST 节点
-        caption: 表题文本（可为空）
         tab_counter: 表格计数 dict
         chapter_path: 章节路径 list
         has_chapter: 是否有章标题
     """
     children = node.get('children', [])
-    # 提取 table_head 和 table_body
     head_cells = []
     body_rows = []
 
@@ -1626,7 +1626,8 @@ def _render_table(doc, node, caption, tab_counter, chapter_path, has_chapter):
 
     ncols = len(head_cells)
 
-    # 获取表题
+    # 表题文本：第一列表头（与原来行为一致）
+    tab_caption = head_cells[0] if head_cells else ''
     tab_key = tuple(chapter_path[:1]) if has_chapter else None
     if tab_key:
         tab_counter[tab_key] = tab_counter.get(tab_key, 0) + 1
@@ -1640,7 +1641,7 @@ def _render_table(doc, node, caption, tab_counter, chapter_path, has_chapter):
     add_empty_para(doc)
     p_tab_cap = doc.add_paragraph()
     p_tab_cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run_tc = p_tab_cap.add_run(f'{tab_label} {caption}')
+    run_tc = p_tab_cap.add_run(f'{tab_label} {tab_caption}')
     set_run_font(run_tc, '宋体', size_pt=10.5, bold=True)
 
     table = doc.add_table(rows=len(body_rows) + 1, cols=ncols)
@@ -1963,7 +1964,6 @@ def generate_docx(ast, output_path, title_text=None):
         elif t == 'block_code':
             add_empty_para(doc)
             p = doc.add_paragraph()
-            p.paragraph_format.left_indent = Cm(1)
             set_first_line_indent_chars(p, 0)
             pPr = p._element.get_or_add_pPr()
             shd = OxmlElement('w:shd')
@@ -1978,7 +1978,7 @@ def generate_docx(ast, output_path, title_text=None):
 
         elif t == 'table':
             caption = _extract_table_caption(prev_para)
-            _render_table(doc, node, caption, tab_counter, chapter_path, has_chapter)
+            _render_table(doc, node, tab_counter, chapter_path, has_chapter)
             prev_para = None
 
     doc.save(output_path)
