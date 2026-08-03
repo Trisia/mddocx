@@ -1855,13 +1855,56 @@ def generate_docx(ast, output_path, title_text=None):
                     set_run_font(run, '宋体', size_pt=10.5, bold=False)
 
         elif t == 'paragraph':
-            p = doc.add_paragraph()
-            p.paragraph_format.first_line_indent = Pt(21)
-            p.paragraph_format.line_spacing = 1.3
-            p.paragraph_format.space_before = Pt(0)
-            p.paragraph_format.space_after = Pt(0)
-            walk_inline(p, node.get('children', []))
-            prev_para = node
+            children = node.get('children', [])
+            # 检测单图段落（仅含一个 image 子节点）：作为独立图片渲染
+            if len(children) == 1 and children[0]['type'] == 'image':
+                img_node = children[0]
+                url = img_node.get('attrs', {}).get('url', img_node.get('src', ''))
+                alt = img_node.get('attrs', {}).get('alt', img_node.get('alt', ''))
+                img_path = download_image(url)
+                if img_path is None:
+                    img_path = add_placeholder_image(doc, alt or url)
+
+                w, h = calc_image_size(img_path)
+
+                add_empty_para(doc)
+                p_img = doc.add_paragraph()
+                p_img.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                run_img = p_img.add_run()
+                run_img.add_picture(img_path, width=w)
+
+                if not alt:
+                    alt = os.path.splitext(os.path.basename(url))[0]
+
+                fig_key = tuple(chapter_path[:1]) if has_chapter else None
+                if fig_key:
+                    fig_counter[fig_key] = fig_counter.get(fig_key, 0) + 1
+                    fig_num = fig_counter[fig_key]
+                else:
+                    fig_counter[None] = fig_counter.get(None, 0) + 1
+                    fig_num = fig_counter[None]
+
+                fig_label = f"图{chapter_path[0]}-{fig_num}" if has_chapter else f"图{fig_num}"
+
+                p_cap = doc.add_paragraph()
+                p_cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                run_cap = p_cap.add_run(f'{fig_label} {alt}')
+                set_run_font(run_cap, '宋体', size_pt=9, bold=True)
+                add_empty_para(doc)
+
+                try:
+                    os.unlink(img_path)
+                except Exception:
+                    pass
+                prev_para = None
+            else:
+                p = doc.add_paragraph()
+                p.paragraph_format.first_line_indent = Pt(21)
+                p.paragraph_format.line_spacing = 1.3
+                p.paragraph_format.space_before = Pt(0)
+                p.paragraph_format.space_after = Pt(0)
+                walk_inline(p, children)
+                prev_para = node
 
         elif t == 'blank_line':
             prev_para = None  # 空行打断表题检测
@@ -1885,6 +1928,7 @@ def generate_docx(ast, output_path, title_text=None):
             add_empty_para(doc)
             p = doc.add_paragraph()
             p.paragraph_format.left_indent = Cm(1)
+            p.paragraph_format.first_line_indent = Pt(0)
             pPr = p._element.get_or_add_pPr()
             shd = OxmlElement('w:shd')
             shd.set(qn('w:val'), 'clear')
@@ -1899,46 +1943,6 @@ def generate_docx(ast, output_path, title_text=None):
         elif t == 'table':
             caption = _extract_table_caption(prev_para)
             _render_table(doc, node, caption, tab_counter, chapter_path, has_chapter)
-            prev_para = None
-
-        elif t == 'image':
-            # 独立图片节点（非行内）
-            url = node.get('attrs', {}).get('url', node.get('src', ''))
-            alt = node.get('attrs', {}).get('alt', node.get('alt', ''))
-            img_path = download_image(url)
-            if img_path is None:
-                img_path = add_placeholder_image(doc, alt or url)
-
-            w, h = calc_image_size(img_path)
-            add_empty_para(doc)
-            p_img = doc.add_paragraph()
-            p_img.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            run_img = p_img.add_run()
-            run_img.add_picture(img_path, width=w)
-
-            if not alt:
-                alt = os.path.splitext(os.path.basename(url))[0]
-
-            fig_key = tuple(chapter_path[:1]) if has_chapter else None
-            if fig_key:
-                fig_counter[fig_key] = fig_counter.get(fig_key, 0) + 1
-                fig_num = fig_counter[fig_key]
-            else:
-                fig_counter[None] = fig_counter.get(None, 0) + 1
-                fig_num = fig_counter[None]
-
-            fig_label = f"图{chapter_path[0]}-{fig_num}" if has_chapter else f"图{fig_num}"
-
-            p_cap = doc.add_paragraph()
-            p_cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            run_cap = p_cap.add_run(f'{fig_label} {alt}')
-            set_run_font(run_cap, '宋体', size_pt=9, bold=True)
-            add_empty_para(doc)
-
-            try:
-                os.unlink(img_path)
-            except Exception:
-                pass
             prev_para = None
 
     doc.save(output_path)
