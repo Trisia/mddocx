@@ -1242,6 +1242,29 @@ def add_page_break_before(paragraph):
     pPr.append(pb)
 
 
+def set_first_line_indent_chars(paragraph, chars=2):
+    """设置段落首行缩进（字符单位），通过 XML w:ind 的 firstLineChars 属性
+
+    参数：
+        paragraph: python-docx Paragraph 对象
+        chars: 缩进字符数（0 表示无缩进，默认 2）
+    """
+    pPr = paragraph._element.get_or_add_pPr()
+    ind = pPr.find(qn('w:ind'))
+    if ind is None:
+        ind = OxmlElement('w:ind')
+        # 插入到 pPr 的第一个子元素之前（通常在 rPr 之前）
+        pPr.insert(0, ind)
+    if chars > 0:
+        ind.set(qn('w:firstLineChars'), str(chars * 100))
+    else:
+        # 清除首行缩进
+        for attr in ('w:firstLineChars', 'w:firstLine'):
+            key = qn(attr)
+            if key in ind.attrib:
+                del ind.attrib[key]
+
+
 def set_outline_level(paragraph, level):
     """设置 outline level（XML方式，兼容所有python-docx版本）"""
     pPr = paragraph._element.get_or_add_pPr()
@@ -1552,8 +1575,8 @@ def _render_list(doc, node, depth=0):
             continue
 
         p = doc.add_paragraph()
-        # 遵守正文段落设定：首行缩进 Pt(21)，1.3 倍行距
-        p.paragraph_format.first_line_indent = Pt(21)
+        # 遵守正文段落设定：首行缩进 2 字符，1.3 倍行距
+        set_first_line_indent_chars(p, 2)
         p.paragraph_format.line_spacing = 1.3
         p.paragraph_format.space_before = Pt(0)
         p.paragraph_format.space_after = Pt(0)
@@ -1856,13 +1879,13 @@ def generate_docx(ast, output_path, title_text=None):
                 elif level == 3:
                     p = doc.add_paragraph()
                     set_outline_level(p, 3)
-                    p.paragraph_format.first_line_indent = Pt(21)
+                    set_first_line_indent_chars(p, 2)
                     run = p.add_run(text)
                     set_run_font(run, '宋体', size_pt=12, bold=False)
                 else:
                     p = doc.add_paragraph()
                     set_outline_level(p, level)
-                    p.paragraph_format.first_line_indent = Pt(21)
+                    set_first_line_indent_chars(p, 2)
                     p.paragraph_format.line_spacing = 1.3
                     run = p.add_run(text)
                     set_run_font(run, '宋体', size_pt=10.5, bold=False)
@@ -1912,7 +1935,7 @@ def generate_docx(ast, output_path, title_text=None):
                 prev_para = None
             else:
                 p = doc.add_paragraph()
-                p.paragraph_format.first_line_indent = Pt(21)
+                set_first_line_indent_chars(p, 2)
                 p.paragraph_format.line_spacing = 1.3
                 p.paragraph_format.space_before = Pt(0)
                 p.paragraph_format.space_after = Pt(0)
@@ -1941,7 +1964,7 @@ def generate_docx(ast, output_path, title_text=None):
             add_empty_para(doc)
             p = doc.add_paragraph()
             p.paragraph_format.left_indent = Cm(1)
-            p.paragraph_format.first_line_indent = Pt(0)
+            set_first_line_indent_chars(p, 0)
             pPr = p._element.get_or_add_pPr()
             shd = OxmlElement('w:shd')
             shd.set(qn('w:val'), 'clear')
