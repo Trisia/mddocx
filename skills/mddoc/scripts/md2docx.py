@@ -1242,6 +1242,21 @@ def add_page_break_before(paragraph):
     pPr.append(pb)
 
 
+def _set_paragraph_left_chars(paragraph, chars=2):
+    """设置段落左缩进（字符单位），通过 XML w:ind 的 w:leftChars 属性
+
+    参数：
+        paragraph: python-docx Paragraph 对象
+        chars: 缩进字符数（默认 2）
+    """
+    pPr = paragraph._element.get_or_add_pPr()
+    ind = pPr.find(qn('w:ind'))
+    if ind is None:
+        ind = OxmlElement('w:ind')
+        pPr.insert(0, ind)
+    ind.set(qn('w:leftChars'), str(chars * 100))
+
+
 def set_first_line_indent_chars(paragraph, chars=2):
     """设置段落首行缩进（字符单位），通过 XML w:ind 的 firstLineChars 属性
 
@@ -1464,8 +1479,8 @@ def _ensure_list_numbering_defs(doc):
         if nid in (ORDERED_NUM_ID, UNORDERED_NUM_ID):
             return
 
-    # 缩进量：Pt(21) = 420 twips，每级增加 420 twips
-    BASE_INDENT = 420  # twips = Pt(21)
+    # 列表缩进由段落 leftChars 控制，numbering 不再叠加缩进
+    BASE_INDENT = 0  # twips
 
     # 抽象编号 50：有序列表 (1, 2, 3..., a, b, c..., i, ii, iii...)
     abs_ord = OxmlElement('w:abstractNum')
@@ -1577,10 +1592,11 @@ def _render_list(doc, node, depth=0):
             continue
 
         p = doc.add_paragraph()
-        # 列表缩进由 numbering 定义控制（w:ind），段落本身不设缩进
         p.paragraph_format.line_spacing = 1.3
         p.paragraph_format.space_before = Pt(0)
         p.paragraph_format.space_after = Pt(0)
+        # 列表段前缩进：每级 2 字符（通过 leftChars），段落本身无首行缩进
+        _set_paragraph_left_chars(p, 2 * (depth + 1))
 
         _set_list_num_pr(p, ordered=ordered, level=depth)
 
@@ -1594,9 +1610,8 @@ def _render_list(doc, node, depth=0):
                 _render_list(doc, child, depth=depth + 1)
 
 
-def _render_table(doc, node, tab_counter, chapter_path, has_chapter):
+def _render_table(doc, node, tab_counter, chapter_path, has_chapter, caption=''):
     """渲染三线表，适配 mistune table AST。
-    表题文本使用表格第一列表头（与原来行为一致）。
 
     参数：
         doc: Document 对象
@@ -1604,6 +1619,7 @@ def _render_table(doc, node, tab_counter, chapter_path, has_chapter):
         tab_counter: 表格计数 dict
         chapter_path: 章节路径 list
         has_chapter: 是否有章标题
+        caption: 表题文本（来自"表 xxx"段落缓冲，或为空回退到 header_cells[0]）
     """
     children = node.get('children', [])
     head_cells = []
@@ -1631,8 +1647,9 @@ def _render_table(doc, node, tab_counter, chapter_path, has_chapter):
 
     ncols = len(head_cells)
 
-    # 表题文本：第一列表头（与原来行为一致）
-    tab_caption = head_cells[0] if head_cells else ''
+    # 表题文本：优先使用传入的 caption，否则回退到第一列表头
+    if not caption:
+        caption = head_cells[0] if head_cells else ''
     tab_key = tuple(chapter_path[:1]) if has_chapter else None
     if tab_key:
         tab_counter[tab_key] = tab_counter.get(tab_key, 0) + 1
@@ -1646,7 +1663,7 @@ def _render_table(doc, node, tab_counter, chapter_path, has_chapter):
     add_empty_para(doc)
     p_tab_cap = doc.add_paragraph()
     p_tab_cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run_tc = p_tab_cap.add_run(f'{tab_label} {tab_caption}')
+    run_tc = p_tab_cap.add_run(f'{tab_label} {caption}')
     set_run_font(run_tc, '宋体', size_pt=10.5, bold=True)
 
     table = doc.add_table(rows=len(body_rows) + 1, cols=ncols)
@@ -1756,22 +1773,6 @@ def _render_display_math(doc, math_text, chapter_path, eq_counter, has_chapter):
     add_empty_para(doc)
 
 
-def _extract_table_caption(prev_node):
-    """从表格前一个段落节点提取表题文本
-
-    参数：
-        prev_node: 前一个 mistune AST 节点（或 None）
-
-    返回:
-        表题文本（不含'表'前缀的部分），若无法提取则返回空字符串
-    """
-    if prev_node and prev_node['type'] == 'paragraph':
-        text = _extract_ast_text(prev_node.get('children', []))
-        if '表' in text:
-            return text.strip()
-    return ''
-
-
 def generate_docx(ast, output_path, title_text=None):
     """遍历 mistune AST 生成 docx 文件
 
@@ -1848,10 +1849,13 @@ def generate_docx(ast, output_path, title_text=None):
     eq_counter = {}
 
     heading_count = 0  # 跟踪标题，第一个 # 是题目
-    prev_para = None  # 表题检测
+    pending_table_caption = None  # "表 xxx" 段落缓冲
 
     # --- AST Walker ---
-    for node in ast:
+    ast_len = len(ast)
+    idx = 0
+    while idx < ast_len:
+        node = ast[idx]
         t = node['type']
 
         if t == 'heading':
@@ -1943,33 +1947,41 @@ def generate_docx(ast, output_path, title_text=None):
                     os.unlink(img_path)
                 except Exception:
                     pass
-                prev_para = None
             else:
-                p = doc.add_paragraph()
-                set_first_line_indent_chars(p, 2)
-                p.paragraph_format.line_spacing = 1.3
-                p.paragraph_format.space_before = Pt(0)
-                p.paragraph_format.space_after = Pt(0)
-                walk_inline(p, children)
-                prev_para = node
+                # 检测 "表 xxx" 段落：若下一个节点是 table，作为表题
+                para_text = _extract_ast_text(children)
+                # 检查下一个非空行节点是否为 table（跳过 blank_line）
+                next_idx = idx + 1
+                while next_idx < ast_len and ast[next_idx]['type'] == 'blank_line':
+                    next_idx += 1
+                if para_text.startswith('表') and next_idx < ast_len and ast[next_idx]['type'] == 'table':
+                    # 缓冲为表题，去除"表 "前缀
+                    pending_table_caption = para_text[1:].strip() if len(para_text) > 1 else para_text
+                else:
+                    p = doc.add_paragraph()
+                    set_first_line_indent_chars(p, 2)
+                    p.paragraph_format.line_spacing = 1.3
+                    p.paragraph_format.space_before = Pt(0)
+                    p.paragraph_format.space_after = Pt(0)
+                    walk_inline(p, children)
 
         elif t == 'blank_line':
-            prev_para = None  # 空行打断表题检测
+            pass  # 不打断表题缓冲
 
         elif t == 'thematic_break':
             p = doc.add_paragraph()
             run = p.add_run('')
             set_run_font(run, '宋体', size_pt=10.5)
             add_page_break_before(p)
-            prev_para = None
+            pending_table_caption = None
 
         elif t == 'list':
             _render_list(doc, node)
-            prev_para = None
+            pending_table_caption = None
 
         elif t == 'block_math':
             _render_display_math(doc, node['raw'], chapter_path, eq_counter, has_chapter)
-            prev_para = None
+            pending_table_caption = None
 
         elif t == 'block_code':
             add_empty_para(doc)
@@ -1984,12 +1996,14 @@ def generate_docx(ast, output_path, title_text=None):
             run = p.add_run(node.get('raw', ''))
             set_run_font(run, '宋体', en_font='Times New Roman', size_pt=10.5)
             add_empty_para(doc)
-            prev_para = None
+            pending_table_caption = None
 
         elif t == 'table':
-            caption = _extract_table_caption(prev_para)
-            _render_table(doc, node, tab_counter, chapter_path, has_chapter)
-            prev_para = None
+            caption = pending_table_caption or ''
+            pending_table_caption = None
+            _render_table(doc, node, tab_counter, chapter_path, has_chapter, caption)
+
+        idx += 1
 
     doc.save(output_path)
     return output_path
