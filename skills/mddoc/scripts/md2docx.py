@@ -19,6 +19,9 @@ import tempfile
 import urllib.parse
 from io import BytesIO
 
+import mistune
+from mistune.plugins import table as mistune_table, math as mistune_math
+
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
@@ -1247,174 +1250,491 @@ def set_outline_level(paragraph, level):
     pPr.append(ol)
 
 
+def override_builtin_heading_styles(doc):
+    """覆盖 Word 内置 Heading 1-6 样式为学术格式，防止默认蓝色/Cambria/加粗干扰
+
+    参数：
+        doc: python-docx Document 对象
+    """
+    specs = {
+        'Heading 1': ('黑体', 16, True, WD_ALIGN_PARAGRAPH.CENTER),
+        'Heading 2': ('黑体', 14, False, WD_ALIGN_PARAGRAPH.LEFT),
+        'Heading 3': ('宋体', 12, False, WD_ALIGN_PARAGRAPH.LEFT),
+        'Heading 4': ('宋体', 10.5, False, WD_ALIGN_PARAGRAPH.LEFT),
+        'Heading 5': ('宋体', 10.5, False, WD_ALIGN_PARAGRAPH.LEFT),
+        'Heading 6': ('宋体', 10.5, False, WD_ALIGN_PARAGRAPH.LEFT),
+    }
+    for name, (cn_font, size_pt, bold, align) in specs.items():
+        style = doc.styles[name]
+        style.font.size = Pt(size_pt)
+        style.font.name = 'Times New Roman'
+        style.font.bold = bold
+        style.font.color.rgb = None
+        style.font.italic = False
+        style.font.underline = False
+        rPr = style.element.get_or_add_rPr()
+        rFonts = rPr.find(qn('w:rFonts'))
+        if rFonts is None:
+            rFonts = OxmlElement('w:rFonts')
+            rPr.insert(0, rFonts)
+        rFonts.set(qn('w:eastAsia'), cn_font)
+        rFonts.set(qn('w:ascii'), 'Times New Roman')
+        rFonts.set(qn('w:hAnsi'), 'Times New Roman')
+        pPr = style.element.get_or_add_pPr()
+        spacing = pPr.find(qn('w:spacing'))
+        if spacing is None:
+            spacing = OxmlElement('w:spacing')
+            pPr.append(spacing)
+        spacing.set(qn('w:before'), '0')
+        spacing.set(qn('w:after'), '0')
+        spacing.set(qn('w:line'), '312')
+        spacing.set(qn('w:lineRule'), 'auto')
+
+
 # ============================================================
 # Markdown 解析
 # ============================================================
 
-def split_inline_math(text):
-    r"""分割段落文本中的行内公式 $...$，返回 segment 列表。
-    每个 segment: {'type': 'text'|'math', 'content': str}
-    支持 \$ 转义（在公式内容和普通文本中），不支持嵌套。
-    使用字符扫描器而非正则，正确处理 \$ 内部 $。
-    """
-    if not text:
-        return [{'type': 'text', 'content': text}]
-    segments = []
-    i = 0
-    last = 0
-    while i < len(text):
-        # 只匹配非转义的 $ 作为定界符
-        if text[i] == '$' and (i == 0 or text[i - 1] != '\\'):
-            # 找匹配的闭合 $
-            j = i + 1
-            while j < len(text):
-                if text[j] == '$' and text[j - 1] != '\\':
-                    # 找到闭合
-                    if i > last:
-                        segments.append({'type': 'text', 'content': text[last:i]})
-                    segments.append({'type': 'math', 'content': text[i + 1:j]})
-                    last = j + 1
-                    i = j
-                    break
-                j += 1
-        i += 1
-    if last < len(text):
-        segments.append({'type': 'text', 'content': text[last:]})
-    return segments if segments else [{'type': 'text', 'content': text}]
-
-
 def parse_markdown(text):
-    """解析 Markdown 文本，返回节点列表。
-    每个节点: {'type': 'title'|'heading'|'para'|'image'|'table'|'code'|'list',
-               'level': int (仅heading),
-               'text': str,
-               'children': [...] (仅list),
-               'alt': str (仅image),
-               'url': str (仅image),
-               'header': list (仅table),
-               'rows': list (仅table)}
+    """使用 mistune 解析 Markdown 文本为 AST 节点列表
+
+    参数：
+        text: Markdown 原始文本
+
+    返回:
+        mistune AST 节点列表，包含 heading/paragraph/list/table/block_math/
+        block_code/thematic_break 等类型
     """
-    import mistune
-
-    nodes = []
-    lines = text.split('\n')
-    i = 0
-    heading_count = 0  # 跟踪 # 标题数量，第一个是题目
-
-    while i < len(lines):
-        line = lines[i]
-
-        # 代码块
-        if line.strip().startswith('```'):
-            code_lines = []
-            i += 1
-            while i < len(lines) and not lines[i].strip().startswith('```'):
-                code_lines.append(lines[i])
-                i += 1
-            i += 1
-            nodes.append({'type': 'code', 'text': '\n'.join(code_lines)})
-            continue
-
-        # 行间公式 $$ ... $$（同行或跨行）
-        if line.strip().startswith('$$'):
-            stripped = line.strip()
-            # 同行闭合：$$ ... $$
-            if stripped.count('$$') >= 2:
-                inner = re.search(r'\$\$(.+?)\$\$', stripped)
-                if inner:
-                    nodes.append({'type': 'display_math', 'text': inner.group(1).strip()})
-                    i += 1
-                    continue
-            # 跨行：$$ 独占一行开始
-            math_lines = []
-            i += 1
-            while i < len(lines) and not lines[i].strip().startswith('$$'):
-                math_lines.append(lines[i])
-                i += 1
-            i += 1  # skip closing $$
-            nodes.append({'type': 'display_math', 'text': '\n'.join(math_lines).strip()})
-            continue
-
-        # 标题 (# ...)
-        m = re.match(r'^(#{1,6})\s+(.*)', line)
-        if m:
-            level = len(m.group(1))
-            title_text = m.group(2).strip()
-            heading_count += 1
-            if level == 1 and heading_count == 1:
-                nodes.append({'type': 'title', 'text': title_text, 'level': 1})
-            else:
-                nodes.append({'type': 'heading', 'text': title_text, 'level': level})
-            i += 1
-            continue
-
-        # 图片 (![alt](url))
-        m = re.match(r'^!\[([^\]]*)\]\(([^)]+)\)', line.strip())
-        if m:
-            nodes.append({'type': 'image', 'alt': m.group(1), 'url': m.group(2)})
-            i += 1
-            continue
-
-        # 表格（检测 | 开头的行）
-        if line.strip().startswith('|'):
-            table_lines = []
-            while i < len(lines) and lines[i].strip().startswith('|'):
-                table_lines.append(lines[i].strip())
-                i += 1
-            # 解析表格：跳过第二行（分隔符行）
-            header = [c.strip() for c in table_lines[0].split('|')[1:-1]]
-            rows = []
-            for tl in table_lines[2:]:
-                rows.append([c.strip() for c in tl.split('|')[1:-1]])
-            nodes.append({'type': 'table', 'header': header, 'rows': rows})
-            continue
-
-        # 空行
-        if not line.strip():
-            nodes.append({'type': 'empty'})
-            i += 1
-            continue
-
-        # 无序列表
-        m = re.match(r'^(\s*)[-*+]\s+(.*)', line)
-        if m:
-            list_items = []
-            indent = len(m.group(1))
-            while i < len(lines):
-                lm = re.match(r'^(\s*)[-*+]\s+(.*)', lines[i])
-                if not lm:
-                    break
-                if abs(len(lm.group(1)) - indent) > 2 and list_items:
-                    break
-                list_items.append(lm.group(2).strip())
-                indent = len(lm.group(1))
-                i += 1
-            nodes.append({'type': 'list', 'children': list_items})
-            continue
-
-        # 普通段落
-        text = line.strip()
-        nodes.append({'type': 'para', 'text': text, 'segments': split_inline_math(text)})
-        i += 1
-
-    return nodes
+    md = mistune.create_markdown(
+        renderer='ast',
+        plugins=[mistune_table.table, mistune_math.math]
+    )
+    return md(text)
 
 
 # ============================================================
 # DOCX 生成
 # ============================================================
 
-def extract_title_text(title_node):
-    """从题目节点提取纯标题文字（去除'第一章'等前缀）"""
-    text = title_node['text']
-    # 去除中文序号前缀如 "第一章 "、"第1章 "
-    text = re.sub(r'^第[一二三四五六七八九十\d]+章\s*', '', text)
-    return text.strip()
+def _extract_ast_text(children):
+    """从 mistune inline AST children 递归提取纯文本
+
+    参数：
+        children: mistune inline AST 子节点列表
+
+    返回:
+        合并后的纯文本字符串
+    """
+    parts = []
+    for c in children:
+        if c['type'] == 'text':
+            parts.append(c.get('raw', ''))
+        elif 'children' in c:
+            parts.append(_extract_ast_text(c['children']))
+    return ''.join(parts)
 
 
-def generate_docx(nodes, output_path, title_text=None):
-    """根据节点列表生成 docx 文件"""
+def _make_temp_para():
+    """创建临时段落对象，用于收集嵌套 inline 的 runs 序列"""
+    tmp_doc = Document()
+    return tmp_doc.add_paragraph()
+
+
+def walk_inline(paragraph, children, base_cn='宋体', base_en='Times New Roman', base_size=10.5):
+    """递归遍历 inline AST，将格式化文本和 OMML 公式附加到段落
+
+    参数：
+        paragraph: python-docx Paragraph 对象
+        children: mistune inline AST 子节点列表
+        base_cn: 中文字体名（默认 '宋体'）
+        base_en: 英文字体名（默认 'Times New Roman'）
+        base_size: 基础字号，单位 pt（默认 10.5）
+    """
+    for child in children:
+        ct = child['type']
+
+        if ct == 'text':
+            raw = child.get('raw', '')
+            if raw:
+                run = paragraph.add_run(raw)
+                set_run_font(run, base_cn, en_font=base_en, size_pt=base_size)
+
+        elif ct == 'strong':
+            tmp_para = _make_temp_para()
+            walk_inline(tmp_para, child.get('children', []), base_cn, base_en, base_size)
+            for r in tmp_para.runs:
+                is_italic = r.font.italic
+                new_run = paragraph.add_run(r.text)
+                set_run_font(new_run, base_cn, en_font=base_en, size_pt=base_size, bold=True)
+                if is_italic:
+                    new_run.font.italic = True
+
+        elif ct == 'emphasis':
+            tmp_para = _make_temp_para()
+            walk_inline(tmp_para, child.get('children', []), base_cn, base_en, base_size)
+            for r in tmp_para.runs:
+                is_bold = r.font.bold
+                new_run = paragraph.add_run(r.text)
+                set_run_font(new_run, base_cn, en_font=base_en, size_pt=base_size, bold=is_bold)
+                new_run.font.italic = True
+
+        elif ct == 'inline_math':
+            try:
+                omml = latex_to_omml(child['raw'], display=False)
+                paragraph._element.append(omml)
+            except Exception:
+                run = paragraph.add_run(child.get('raw', ''))
+                set_run_font(run, base_cn, en_font=base_en, size_pt=base_size)
+                run.font.italic = True
+
+        elif ct == 'codespan':
+            run = paragraph.add_run(child.get('raw', ''))
+            set_run_font(run, base_cn, en_font=base_en, size_pt=base_size)
+
+        elif ct == 'link':
+            tmp_para = _make_temp_para()
+            walk_inline(tmp_para, child.get('children', []), base_cn, base_en, base_size)
+            for r in tmp_para.runs:
+                new_run = paragraph.add_run(r.text)
+                set_run_font(new_run, base_cn, en_font=base_en, size_pt=base_size)
+                new_run.font.underline = True
+
+        elif ct == 'image':
+            url = child.get('attrs', {}).get('url', '')
+            alt = child.get('alt', '')
+            img_path = download_image(url)
+            if img_path is None:
+                img_path = add_placeholder_image(None, alt or url)
+            if img_path:
+                w, h = calc_image_size(img_path)
+                run = paragraph.add_run()
+                run.add_picture(img_path, width=w)
+                try:
+                    os.unlink(img_path)
+                except Exception:
+                    pass
+
+        elif ct == 'linebreak':
+            run = paragraph.add_run()
+            run.add_break()
+
+
+def _ensure_list_numbering_defs(doc):
+    """确保文档 numbering.xml 中存在有序和无序列表的抽象编号定义。
+    python-docx 默认不含列表定义，需手动在 XML 级别注入。
+
+    参数：
+        doc: python-docx Document 对象
+    """
+    # 使用不与 Word 默认模板冲突的 numId
+    ORDERED_NUM_ID = '50'
+    UNORDERED_NUM_ID = '51'
+
+    numbering_part = doc.part.numbering_part
+    numbering_elem = numbering_part._element
+
+    # 检查是否已存在
+    for num in numbering_elem.findall(qn('w:num')):
+        nid = num.get(qn('w:numId'))
+        if nid in (ORDERED_NUM_ID, UNORDERED_NUM_ID):
+            return
+
+    # 抽象编号 0：有序列表 (1, 2, 3...)
+    abs_ord = OxmlElement('w:abstractNum')
+    abs_ord.set(qn('w:abstractNumId'), '0')
+    lvl_ord = OxmlElement('w:lvl')
+    lvl_ord.set(qn('w:ilvl'), '0')
+    start_ord = OxmlElement('w:start')
+    start_ord.set(qn('w:val'), '1')
+    lvl_ord.append(start_ord)
+    numFmt_ord = OxmlElement('w:numFmt')
+    numFmt_ord.set(qn('w:val'), 'decimal')
+    lvl_ord.append(numFmt_ord)
+    lvlText_ord = OxmlElement('w:lvlText')
+    lvlText_ord.set(qn('w:val'), '%1.')
+    lvl_ord.append(lvlText_ord)
+    lvlJc_ord = OxmlElement('w:lvlJc')
+    lvlJc_ord.set(qn('w:val'), 'left')
+    lvl_ord.append(lvlJc_ord)
+    pPr_ord = OxmlElement('w:pPr')
+    ind_ord = OxmlElement('w:ind')
+    ind_ord.set(qn('w:left'), '360')
+    ind_ord.set(qn('w:hanging'), '360')
+    pPr_ord.append(ind_ord)
+    lvl_ord.append(pPr_ord)
+    abs_ord.append(lvl_ord)
+    numbering_elem.append(abs_ord)
+
+    # 抽象编号 1：无序列表 (• bullet)
+    abs_unord = OxmlElement('w:abstractNum')
+    abs_unord.set(qn('w:abstractNumId'), '1')
+    lvl_unord = OxmlElement('w:lvl')
+    lvl_unord.set(qn('w:ilvl'), '0')
+    start_unord = OxmlElement('w:start')
+    start_unord.set(qn('w:val'), '1')
+    lvl_unord.append(start_unord)
+    numFmt_unord = OxmlElement('w:numFmt')
+    numFmt_unord.set(qn('w:val'), 'bullet')
+    lvl_unord.append(numFmt_unord)
+    lvlText_unord = OxmlElement('w:lvlText')
+    lvlText_unord.set(qn('w:val'), '•')
+    lvl_unord.append(lvlText_unord)
+    lvlJc_unord = OxmlElement('w:lvlJc')
+    lvlJc_unord.set(qn('w:val'), 'left')
+    lvl_unord.append(lvlJc_unord)
+    pPr_unord = OxmlElement('w:pPr')
+    ind_unord = OxmlElement('w:ind')
+    ind_unord.set(qn('w:left'), '360')
+    ind_unord.set(qn('w:hanging'), '360')
+    pPr_unord.append(ind_unord)
+    lvl_unord.append(pPr_unord)
+    abs_unord.append(lvl_unord)
+    numbering_elem.append(abs_unord)
+
+    # num 实例：有序列表 → numId=50
+    num_ord = OxmlElement('w:num')
+    num_ord.set(qn('w:numId'), ORDERED_NUM_ID)
+    absRef_ord = OxmlElement('w:abstractNumId')
+    absRef_ord.set(qn('w:val'), '0')
+    num_ord.append(absRef_ord)
+    numbering_elem.append(num_ord)
+
+    # num 实例：无序列表 → numId=51
+    num_unord = OxmlElement('w:num')
+    num_unord.set(qn('w:numId'), UNORDERED_NUM_ID)
+    absRef_unord = OxmlElement('w:abstractNumId')
+    absRef_unord.set(qn('w:val'), '1')
+    num_unord.append(absRef_unord)
+    numbering_elem.append(num_unord)
+
+
+def _set_list_num_pr(paragraph, ordered=False, level=0):
+    """设置段落的 Word 原生列表编号属性 (w:numPr)
+
+    参数：
+        paragraph: python-docx Paragraph 对象
+        ordered: True=编号列表(1,2,3...), False=项目符号(•)
+        level: 列表嵌套层级（0=顶层）
+    """
+    num_id = '50' if ordered else '51'
+    pPr = paragraph._element.get_or_add_pPr()
+    numPr = OxmlElement('w:numPr')
+    ilvl = OxmlElement('w:ilvl')
+    ilvl.set(qn('w:val'), str(level))
+    numPr.append(ilvl)
+    numId = OxmlElement('w:numId')
+    numId.set(qn('w:val'), num_id)
+    numPr.append(numId)
+    pPr.append(numPr)
+
+
+def _render_list(doc, node):
+    """渲染 Word 原生列表（有序/无序），列表项支持富文本 inline
+
+    参数：
+        doc: python-docx Document 对象
+        node: mistune list AST 节点
+    """
+    ordered = node.get('attrs', {}).get('ordered', False) if 'attrs' in node else node.get('ordered', False)
+
+    for item in node.get('children', []):
+        if item['type'] != 'list_item':
+            continue
+
+        p = doc.add_paragraph()
+        p.paragraph_format.line_spacing = 1.3
+        p.paragraph_format.space_before = Pt(0)
+        p.paragraph_format.space_after = Pt(0)
+        p.paragraph_format.left_indent = Cm(0.63)
+        p.paragraph_format.first_line_indent = Cm(-0.63)
+
+        _set_list_num_pr(p, ordered=ordered, level=0)
+
+        for child in item.get('children', []):
+            if child['type'] == 'block_text':
+                walk_inline(p, child.get('children', []))
+            elif child['type'] == 'paragraph':
+                walk_inline(p, child.get('children', []))
+
+
+def _render_table(doc, node, caption, tab_counter, chapter_path, has_chapter):
+    """渲染三线表，适配 mistune table AST
+
+    参数：
+        doc: Document 对象
+        node: mistune table AST 节点
+        caption: 表题文本（可为空）
+        tab_counter: 表格计数 dict
+        chapter_path: 章节路径 list
+        has_chapter: 是否有章标题
+    """
+    children = node.get('children', [])
+    # 提取 table_head 和 table_body
+    head_cells = []
+    body_rows = []
+
+    for c in children:
+        if c['type'] == 'table_head':
+            for row in c.get('children', []):
+                for cell in row.get('children', []):
+                    head_cells.append(_extract_ast_text(cell.get('children', [])))
+        elif c['type'] == 'table_body':
+            for row in c.get('children', []):
+                row_data = []
+                for cell in row.get('children', []):
+                    row_data.append(_extract_ast_text(cell.get('children', [])))
+                body_rows.append(row_data)
+
+    if not head_cells:
+        return
+
+    ncols = len(head_cells)
+
+    # 获取表题
+    tab_key = tuple(chapter_path[:1]) if has_chapter else None
+    if tab_key:
+        tab_counter[tab_key] = tab_counter.get(tab_key, 0) + 1
+        tab_num = tab_counter[tab_key]
+    else:
+        tab_counter[None] = tab_counter.get(None, 0) + 1
+        tab_num = tab_counter[None]
+
+    tab_label = f"表{chapter_path[0]}-{tab_num}" if has_chapter else f"表{tab_num}"
+
+    add_empty_para(doc)
+    p_tab_cap = doc.add_paragraph()
+    p_tab_cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run_tc = p_tab_cap.add_run(f'{tab_label} {caption}')
+    set_run_font(run_tc, '宋体', size_pt=10.5, bold=True)
+
+    table = doc.add_table(rows=len(body_rows) + 1, cols=ncols)
+    table.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    set_three_line_table(table)
+
+    # 表头行设为重复标题行（跨页自动出现）
+    tblHeader_el = OxmlElement('w:tblHeader')
+    trPr = table.rows[0]._tr.get_or_add_trPr()
+    trPr.append(tblHeader_el)
+
+    for j, cell_text in enumerate(head_cells):
+        cell = table.rows[0].cells[j]
+        cell.paragraphs[0].clear()
+        cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = cell.paragraphs[0].add_run(cell_text)
+        set_run_font(run, '宋体', size_pt=9)
+        cell.paragraphs[0].paragraph_format.first_line_indent = Pt(0)
+
+    for i, row_data in enumerate(body_rows):
+        for j, cell_text in enumerate(row_data):
+            if j < ncols:
+                cell = table.rows[i + 1].cells[j]
+                cell.paragraphs[0].clear()
+                cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT
+                run = cell.paragraphs[0].add_run(cell_text)
+                set_run_font(run, '宋体', size_pt=9)
+                cell.paragraphs[0].paragraph_format.first_line_indent = Pt(0)
+
+    add_empty_para(doc)
+
+
+def _render_display_math(doc, math_text, chapter_path, eq_counter, has_chapter):
+    """渲染行间公式：上下各空一行、OMLL 居中、编号右对齐
+
+    参数：
+        doc: Document 对象
+        math_text: LaTeX 公式文本（不含 $$ 定界符）
+        chapter_path: 章节路径 list
+        eq_counter: 公式计数 dict
+        has_chapter: 是否有章标题
+    """
+    try:
+        omml = latex_to_omml(math_text, display=True)
+    except Exception:
+        omml = None
+
+    if omml is not None and omml.tag == f'{{{NSM}}}oMathPara':
+        add_empty_para(doc)
+        p_align = doc.add_paragraph()
+        p_align.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        lines = list(omml)
+        for idx, line_omml in enumerate(lines):
+            if idx > 0:
+                br_run = p_align.add_run()
+                br = OxmlElement('w:br')
+                br_run._r.append(br)
+            p_align._element.append(line_omml)
+        add_empty_para(doc)
+        return
+
+    add_empty_para(doc)
+    p = doc.add_paragraph()
+    pPr = p._element.get_or_add_pPr()
+    tabs = OxmlElement('w:tabs')
+    center_tab = OxmlElement('w:tab')
+    center_tab.set(qn('w:val'), 'center')
+    center_tab.set(qn('w:pos'), '4536')
+    tabs.append(center_tab)
+    right_tab = OxmlElement('w:tab')
+    right_tab.set(qn('w:val'), 'right')
+    right_tab.set(qn('w:pos'), '9072')
+    tabs.append(right_tab)
+    pPr.append(tabs)
+    run_t1 = p.add_run()
+    tab1 = OxmlElement('w:tab')
+    run_t1._r.append(tab1)
+    if omml is not None:
+        p._element.append(omml)
+    else:
+        run_fb = p.add_run('[公式解析失败]')
+        set_run_font(run_fb, '宋体', en_font='Times New Roman', size_pt=10.5)
+    run_t2 = p.add_run()
+    tab2 = OxmlElement('w:tab')
+    run_t2._r.append(tab2)
+    ch_num = chapter_path[0]
+
+    eq_key = tuple(chapter_path[:1]) if has_chapter else None
+    if eq_key:
+        eq_counter[eq_key] = eq_counter.get(eq_key, 0) + 1
+        eq_num = eq_counter[eq_key]
+    else:
+        eq_counter[None] = eq_counter.get(None, 0) + 1
+        eq_num = eq_counter[None]
+
+    run_lp = p.add_run('(')
+    set_run_font(run_lp, '宋体', en_font='宋体', size_pt=10.5)
+    run_lnum = p.add_run(f'{ch_num}-{eq_num}')
+    set_run_font(run_lnum, '宋体', en_font='Times New Roman', size_pt=10.5)
+    run_rp = p.add_run(')')
+    set_run_font(run_rp, '宋体', en_font='宋体', size_pt=10.5)
+    add_empty_para(doc)
+
+
+def _extract_table_caption(prev_node):
+    """从表格前一个段落节点提取表题文本
+
+    参数：
+        prev_node: 前一个 mistune AST 节点（或 None）
+
+    返回:
+        表题文本（不含'表'前缀的部分），若无法提取则返回空字符串
+    """
+    if prev_node and prev_node['type'] == 'paragraph':
+        text = _extract_ast_text(prev_node.get('children', []))
+        if '表' in text:
+            return text.strip()
+    return ''
+
+
+def generate_docx(ast, output_path, title_text=None):
+    """遍历 mistune AST 生成 docx 文件
+
+    参数：
+        ast: mistune AST 节点列表
+        output_path: 输出 docx 文件路径
+        title_text: 文档题目（用于页眉）
+    """
     doc = Document()
+    override_builtin_heading_styles(doc)
 
     # --- 默认样式 ---
     style = doc.styles['Normal']
@@ -1427,19 +1747,16 @@ def generate_docx(nodes, output_path, title_text=None):
 
     # --- 节/页边距设置 ---
     section = doc.sections[0]
-    # 页边距：左3cm 右2cm 上2cm 下2cm
     section.left_margin = Cm(3)
     section.right_margin = Cm(2)
     section.top_margin = Cm(2)
     section.bottom_margin = Cm(2)
     header = section.header
     header.is_linked_to_previous = False
-    # 左顶格 xxxxx
     hp_left = header.paragraphs[0]
     hp_left.paragraph_format.space_after = Pt(0)
     run_l = hp_left.add_run('xxxxx')
     set_run_font(run_l, '黑体', size_pt=9)
-    # 右顶格 题目
     hp_right = header.add_paragraph()
     hp_right.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     hp_right.paragraph_format.space_before = Pt(0)
@@ -1452,10 +1769,8 @@ def generate_docx(nodes, output_path, title_text=None):
     footer.is_linked_to_previous = False
     fp = footer.paragraphs[0]
     fp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    # "第"
     r1 = fp.add_run('第')
     set_run_font(r1, '宋体', size_pt=10.5)
-    # PAGE 字段
     r_page = fp.add_run()
     fc1 = OxmlElement('w:fldChar'); fc1.set(qn('w:fldCharType'), 'begin')
     r_page._r.append(fc1)
@@ -1463,10 +1778,8 @@ def generate_docx(nodes, output_path, title_text=None):
     r_page._r.append(it1)
     fc2 = OxmlElement('w:fldChar'); fc2.set(qn('w:fldCharType'), 'end')
     r_page._r.append(fc2)
-    # "页  共"
     r2 = fp.add_run('页  共')
     set_run_font(r2, '宋体', size_pt=10.5)
-    # NUMPAGES 字段
     r_total = fp.add_run()
     fc3 = OxmlElement('w:fldChar'); fc3.set(qn('w:fldCharType'), 'begin')
     r_total._r.append(fc3)
@@ -1474,292 +1787,159 @@ def generate_docx(nodes, output_path, title_text=None):
     r_total._r.append(it2)
     fc4 = OxmlElement('w:fldChar'); fc4.set(qn('w:fldCharType'), 'end')
     r_total._r.append(fc4)
-    # "页"
     r3 = fp.add_run('页')
     set_run_font(r3, '宋体', size_pt=10.5)
 
+    # --- 列表编号定义 ---
+    _ensure_list_numbering_defs(doc)
+
     # --- 计数器 ---
     chapter_path = [1]  # 一级标题序号
-    has_chapter = False  # 是否遇到章标题（# 一级标题）
-    fig_counter = {}  # key: chapter index tuple, value: counter
+    has_chapter = False
+    fig_counter = {}
     tab_counter = {}
     eq_counter = {}
 
-    def get_chapter_key():
-        return tuple(chapter_path[:1])  # 只用一级序号作为章key
+    heading_count = 0  # 跟踪标题，第一个 # 是题目
+    prev_para = None  # 表题检测
 
-    def incr_fig():
-        key = get_chapter_key()
-        fig_counter[key] = fig_counter.get(key, 0) + 1
-        return fig_counter[key]
-
-    def incr_tab():
-        key = get_chapter_key()
-        tab_counter[key] = tab_counter.get(key, 0) + 1
-        return tab_counter[key]
-
-    def incr_eq():
-        key = get_chapter_key()
-        eq_counter[key] = eq_counter.get(key, 0) + 1
-        return eq_counter[key]
-
-    def make_fig_label():
-        if has_chapter:
-            return f"图{chapter_path[0]}-{incr_fig()}"
-        return f"图{incr_fig()}"
-
-    def make_tab_label():
-        if has_chapter:
-            return f"表{chapter_path[0]}-{incr_tab()}"
-        return f"表{incr_tab()}"
-
-    # --- 遍历节点生成内容 ---
-    for node in nodes:
+    # --- AST Walker ---
+    for node in ast:
         t = node['type']
 
-        if t == 'title':
-            add_empty_para(doc)
-            p = doc.add_paragraph()
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            run = p.add_run(node['text'])
-            set_run_font(run, '黑体', size_pt=16)
-            add_empty_para(doc)
+        if t == 'heading':
+            heading_count += 1
+            level = node.get('attrs', {}).get('level', 1)
+            text = _extract_ast_text(node.get('children', []))
 
-        elif t == 'heading':
-            lv = node['level']
-            if lv == 1:
-                # 一级标题：新页 + 三号黑体居中
-                has_chapter = True
-                chapter_path[0] += 1
-                chapter_path[1:] = [0]  # reset sub-levels
-
+            if level == 1 and heading_count == 1:
+                # 题目：三号黑体居中
                 add_empty_para(doc)
                 p = doc.add_paragraph()
-                add_page_break_before(p)
                 p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                set_outline_level(p, 1)
-                run = p.add_run(node['text'])
+                run = p.add_run(text)
                 set_run_font(run, '黑体', size_pt=16)
                 add_empty_para(doc)
+            else:
+                if level == 1:
+                    has_chapter = True
+                    chapter_path[0] += 1
 
-            elif lv == 2:
-                # 二级标题：四号黑体顶格不加粗，上下不空行
-                p = doc.add_paragraph()
-                set_outline_level(p, 2)
-                p.paragraph_format.first_line_indent = Pt(0)
-                run = p.add_run(node['text'])
-                set_run_font(run, '黑体', size_pt=14, bold=False)
+                if level == 1:
+                    add_empty_para(doc)
+                    p = doc.add_paragraph()
+                    add_page_break_before(p)
+                    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    set_outline_level(p, 1)
+                    run = p.add_run(text)
+                    set_run_font(run, '黑体', size_pt=16)
+                    add_empty_para(doc)
+                elif level == 2:
+                    p = doc.add_paragraph()
+                    set_outline_level(p, 2)
+                    p.paragraph_format.first_line_indent = Pt(0)
+                    run = p.add_run(text)
+                    set_run_font(run, '黑体', size_pt=14, bold=False)
+                elif level == 3:
+                    p = doc.add_paragraph()
+                    set_outline_level(p, 3)
+                    p.paragraph_format.first_line_indent = Pt(21)
+                    run = p.add_run(text)
+                    set_run_font(run, '宋体', size_pt=12, bold=False)
+                else:
+                    p = doc.add_paragraph()
+                    set_outline_level(p, level)
+                    p.paragraph_format.first_line_indent = Pt(21)
+                    p.paragraph_format.line_spacing = 1.3
+                    run = p.add_run(text)
+                    set_run_font(run, '宋体', size_pt=10.5, bold=False)
 
-            elif lv == 3:
-                # 三级标题：小四宋体不加粗，首行缩进同正文，上下不空行
-                p = doc.add_paragraph()
-                set_outline_level(p, 3)
-                p.paragraph_format.first_line_indent = Pt(21)
-                run = p.add_run(node['text'])
-                set_run_font(run, '宋体', size_pt=12, bold=False)
-
-            elif lv >= 4:
-                # 四级及以上标题：格式同正文（五号宋体），但设置对应 outline_level
-                p = doc.add_paragraph()
-                set_outline_level(p, lv)
-                p.paragraph_format.first_line_indent = Pt(21)
-                p.paragraph_format.line_spacing = 1.3
-                p.paragraph_format.space_before = Pt(0)
-                p.paragraph_format.space_after = Pt(0)
-                run = p.add_run(node['text'])
-                set_run_font(run, '宋体', size_pt=10.5, bold=False)
-
-        elif t == 'para':
+        elif t == 'paragraph':
             p = doc.add_paragraph()
             p.paragraph_format.first_line_indent = Pt(21)
             p.paragraph_format.line_spacing = 1.3
             p.paragraph_format.space_before = Pt(0)
             p.paragraph_format.space_after = Pt(0)
-            segments = node.get('segments', [{'type': 'text', 'content': node['text']}])
-            for seg in segments:
-                if seg['type'] == 'text':
-                    if seg['content']:  # 跳过空字符串
-                        run = p.add_run(seg['content'])
-                        set_run_font(run, '宋体', size_pt=10.5)
-                else:  # math — 插入 OMML 公式
-                    try:
-                        omml = latex_to_omml(seg['content'], display=False)
-                        p._element.append(omml)
-                    except Exception:
-                        # 解析失败时回退到斜体文本
-                        run = p.add_run(seg['content'])
-                        set_run_font(run, '宋体', en_font='Times New Roman', size_pt=10.5)
-                        run.font.italic = True
+            walk_inline(p, node.get('children', []))
+            prev_para = node
 
-        elif t == 'image':
-            url = node['url']
-            alt = node['alt']
-            img_path = download_image(url)
-            if img_path is None:
-                img_path = add_placeholder_image(doc, alt or url)
+        elif t == 'blank_line':
+            prev_para = None  # 空行打断表题检测
 
-            w, h = calc_image_size(img_path)
+        elif t == 'thematic_break':
+            p = doc.add_paragraph()
+            run = p.add_run('')
+            set_run_font(run, '宋体', size_pt=10.5)
+            add_page_break_before(p)
+            prev_para = None
 
-            add_empty_para(doc)
-            # 图片居中
-            p_img = doc.add_paragraph()
-            p_img.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            run_img = p_img.add_run()
-            run_img.add_picture(img_path, width=w)
+        elif t == 'list':
+            _render_list(doc, node)
+            prev_para = None
 
-            # 图题：小五宋体加粗居中
-            # alt 为空时，使用图片文件名（不含扩展名）作为默认图题
-            if not alt:
-                alt = os.path.splitext(os.path.basename(url))[0]
-            p_cap = doc.add_paragraph()
-            p_cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            run_cap = p_cap.add_run(f'{make_fig_label()} {alt}')
-            set_run_font(run_cap, '宋体', size_pt=9, bold=True)
-            add_empty_para(doc)
+        elif t == 'block_math':
+            _render_display_math(doc, node['raw'], chapter_path, eq_counter, has_chapter)
+            prev_para = None
 
-            # 清理临时图片
-            try:
-                os.unlink(img_path)
-            except Exception:
-                pass
-
-        elif t == 'table':
-            header_cells = node['header']
-            rows = node['rows']
-            ncols = len(header_cells)
-
-            # 检查前一个节点是否为表题段落
-            # （在 parse 阶段已处理，这里简化：表题由前一个 para 节点承担，此处检测）
-            # 实际简化处理：如果有 header text，自动加表题
-
-            # 表题
-            add_empty_para(doc)
-            p_tab_cap = doc.add_paragraph()
-            p_tab_cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            run_tc = p_tab_cap.add_run(f'{make_tab_label()} {header_cells[0] if header_cells else ""}')
-            set_run_font(run_tc, '宋体', size_pt=10.5, bold=True)
-
-            # 表格
-            table = doc.add_table(rows=len(rows) + 1, cols=ncols)
-            table.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            set_three_line_table(table)
-
-            # 表头行设为重复标题行（跨页自动出现）
-            tblHeader = OxmlElement('w:tblHeader')
-            trPr = table.rows[0]._tr.get_or_add_trPr()
-            trPr.append(tblHeader)
-
-            # 表头行
-            for j, cell_text in enumerate(header_cells):
-                cell = table.rows[0].cells[j]
-                cell.paragraphs[0].clear()
-                cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-                run = cell.paragraphs[0].add_run(cell_text)
-                set_run_font(run, '宋体', size_pt=9)
-                cell.paragraphs[0].paragraph_format.first_line_indent = Pt(0)
-
-            # 数据行
-            for i, row_data in enumerate(rows):
-                for j, cell_text in enumerate(row_data):
-                    cell = table.rows[i + 1].cells[j]
-                    cell.paragraphs[0].clear()
-                    cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT
-                    run = cell.paragraphs[0].add_run(cell_text)
-                    set_run_font(run, '宋体', size_pt=9)
-                    cell.paragraphs[0].paragraph_format.first_line_indent = Pt(0)
-
-            add_empty_para(doc)
-
-        elif t == 'code':
+        elif t == 'block_code':
             add_empty_para(doc)
             p = doc.add_paragraph()
             p.paragraph_format.left_indent = Cm(1)
-            # 灰色背景
             pPr = p._element.get_or_add_pPr()
             shd = OxmlElement('w:shd')
             shd.set(qn('w:val'), 'clear')
             shd.set(qn('w:color'), 'auto')
             shd.set(qn('w:fill'), 'D9D9D9')
             pPr.append(shd)
-            run = p.add_run(node['text'])
+            run = p.add_run(node.get('raw', ''))
             set_run_font(run, '宋体', en_font='Times New Roman', size_pt=10.5)
             add_empty_para(doc)
+            prev_para = None
 
-        elif t == 'display_math':
-            # 行间公式：上下各空一行，公式居中，编号右对齐
-            try:
-                omml = latex_to_omml(node['text'], display=True)
-            except Exception:
-                omml = None
+        elif t == 'table':
+            caption = _extract_table_caption(prev_para)
+            _render_table(doc, node, caption, tab_counter, chapter_path, has_chapter)
+            prev_para = None
 
-            # 多行公式（align 环境返回 m:oMathPara）：同一段落，m:oMath 用 <w:br/> 分隔
-            if omml is not None and omml.tag == f'{{{NSM}}}oMathPara':
-                add_empty_para(doc)
-                p_align = doc.add_paragraph()
-                p_align.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                lines = list(omml)  # m:oMath 子元素
-                for idx, line_omml in enumerate(lines):
-                    if idx > 0:
-                        # 行间插入换行符
-                        br_run = p_align.add_run()
-                        br = OxmlElement('w:br')
-                        br_run._r.append(br)
-                    p_align._element.append(line_omml)
-                add_empty_para(doc)
-                continue
+        elif t == 'image':
+            # 独立图片节点（非行内）
+            url = node.get('attrs', {}).get('url', node.get('src', ''))
+            alt = node.get('attrs', {}).get('alt', node.get('alt', ''))
+            img_path = download_image(url)
+            if img_path is None:
+                img_path = add_placeholder_image(doc, alt or url)
 
+            w, h = calc_image_size(img_path)
             add_empty_para(doc)
-            p = doc.add_paragraph()
-            # 设置段落 tab stops：居中 + 右对齐
-            pPr = p._element.get_or_add_pPr()
-            tabs = OxmlElement('w:tabs')
-            # 居中 tab：左边距3cm右边距2cm，可用宽度16cm，中心8cm → 4536 twips
-            center_tab = OxmlElement('w:tab')
-            center_tab.set(qn('w:val'), 'center')
-            center_tab.set(qn('w:pos'), '4536')
-            tabs.append(center_tab)
-            # 右对齐 tab：16cm → 9072 twips
-            right_tab = OxmlElement('w:tab')
-            right_tab.set(qn('w:val'), 'right')
-            right_tab.set(qn('w:pos'), '9072')
-            tabs.append(right_tab)
-            pPr.append(tabs)
-            # tab → 居中位置
-            run_t1 = p.add_run()
-            tab1 = OxmlElement('w:tab')
-            run_t1._r.append(tab1)
-            # 插入 OMML 行内公式（m:oMath 在 w:r 同级参与排版）
-            if omml is not None:
-                p._element.append(omml)
+            p_img = doc.add_paragraph()
+            p_img.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            run_img = p_img.add_run()
+            run_img.add_picture(img_path, width=w)
+
+            if not alt:
+                alt = os.path.splitext(os.path.basename(url))[0]
+
+            fig_key = tuple(chapter_path[:1]) if has_chapter else None
+            if fig_key:
+                fig_counter[fig_key] = fig_counter.get(fig_key, 0) + 1
+                fig_num = fig_counter[fig_key]
             else:
-                run_fb = p.add_run(node['text'])
-                set_run_font(run_fb, '宋体', en_font='Times New Roman', size_pt=10.5)
-                run_fb.font.italic = True
-            # tab → 右对齐位置 → 公式编号
-            run_t2 = p.add_run()
-            tab2 = OxmlElement('w:tab')
-            run_t2._r.append(tab2)
-            ch_num = chapter_path[0]
-            eq_num = incr_eq()
-            # 编号格式：括号用宋体，数字用TNR
-            run_lp = p.add_run('(')
-            set_run_font(run_lp, '宋体', en_font='宋体', size_pt=10.5)
-            run_lnum = p.add_run(f'{ch_num}-{eq_num}')
-            set_run_font(run_lnum, '宋体', en_font='Times New Roman', size_pt=10.5)
-            run_rp = p.add_run(')')
-            set_run_font(run_rp, '宋体', en_font='宋体', size_pt=10.5)
+                fig_counter[None] = fig_counter.get(None, 0) + 1
+                fig_num = fig_counter[None]
+
+            fig_label = f"图{chapter_path[0]}-{fig_num}" if has_chapter else f"图{fig_num}"
+
+            p_cap = doc.add_paragraph()
+            p_cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            run_cap = p_cap.add_run(f'{fig_label} {alt}')
+            set_run_font(run_cap, '宋体', size_pt=9, bold=True)
             add_empty_para(doc)
 
-        elif t == 'list':
-            for idx, item in enumerate(node['children'], 1):
-                p = doc.add_paragraph()
-                p.paragraph_format.first_line_indent = Pt(21)
-                p.paragraph_format.line_spacing = 1.3
-                run = p.add_run(f'（{idx}）{item}')
-                set_run_font(run, '宋体', size_pt=10.5)
-
-        elif t == 'empty':
-            pass  # 段落间不空行，空行由标题/图表handler显式添加
+            try:
+                os.unlink(img_path)
+            except Exception:
+                pass
+            prev_para = None
 
     doc.save(output_path)
     return output_path
@@ -1800,9 +1980,13 @@ def main():
     # 解析
     nodes = parse_markdown(md_content)
 
-    # 提取题目（可选）
-    title_node = next((n for n in nodes if n['type'] == 'title'), None)
-    title_text = extract_title_text(title_node) if title_node else None
+    # 提取题目（第一个 heading level=1）
+    title_node = None
+    for n in nodes:
+        if n['type'] == 'heading' and n.get('attrs', {}).get('level') == 1:
+            title_node = n
+            break
+    title_text = _extract_ast_text(title_node['children']) if title_node else None
 
     # 确定输出路径
     if args.output:

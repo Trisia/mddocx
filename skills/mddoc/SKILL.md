@@ -319,23 +319,98 @@ set_cn_font(r2, '黑体', size_pt=9)
 
 ### 列表
 
-有序列表用（1）、（2）、（3）序号；无序列表用 • 符号。按正文格式（首行缩进Pt(21)）。
+列表使用 Word 原生编号/项目符号（通过 `w:numPr` XML），支持富文本 inline（加粗、斜体、行内公式等）。悬挂缩进：符号悬出，文本缩进对齐。
 
 ```python
-# 有序列表 — (1)、(2)、(3) 格式
-for idx, item in enumerate(items, 1):
+# 有序列表 — Word 原生编号 (1, 2, 3...)
+for item in list_node['children']:
     p = doc.add_paragraph()
-    p.paragraph_format.first_line_indent = Pt(21)
-    run = p.add_run(f'（{idx}）{item}')
-    set_cn_font(run, '宋体', size_pt=10.5)
+    p.paragraph_format.line_spacing = 1.3
+    p.paragraph_format.left_indent = Cm(0.63)
+    p.paragraph_format.first_line_indent = Cm(-0.63)
+    # 设置 Word 原生编号
+    numPr = OxmlElement('w:numPr')
+    ilvl = OxmlElement('w:ilvl'); ilvl.set(qn('w:val'), '0')
+    numId = OxmlElement('w:numId'); numId.set(qn('w:val'), '50')  # 50=有序
+    numPr.append(ilvl); numPr.append(numId)
+    p._element.get_or_add_pPr().append(numPr)
+    # walk_inline 渲染富文本
+    walk_inline(p, item['children'][0]['children'], '宋体', size_pt=10.5)
 
-# 无序列表
-for item in items:
-    p = doc.add_paragraph()
-    p.paragraph_format.first_line_indent = Pt(21)
-    run = p.add_run(f'• {item}')
-    set_cn_font(run, '宋体', size_pt=10.5)
+# 无序列表 — Word 原生黑圆点 (•)，numId=51
+for item in list_node['children']:
+    # 同上，numId 改为 '51'
+    ...
+
+# 列表编号定义（生成文档时需在 numbering.xml 中注入抽象编号）
+_ensure_list_numbering_defs(doc)  # 定义 numId=50(有序) 和 numId=51(无序)
 ```
+
+列表编号自动跨页连续（同一 `numId` 的段落由 Word 维护编号序列）。
+
+### 内联格式（加粗、斜体、行内公式等）
+
+段落内使用 `walk_inline()` 递归遍历 mistune inline AST，生成带格式的 runs 和 OMML 元素：
+
+```python
+def walk_inline(paragraph, children, base_cn='宋体', base_en='Times New Roman', base_size=10.5):
+    for child in children:
+        ct = child['type']
+        if ct == 'text':
+            if child.get('raw', ''):
+                run = paragraph.add_run(child['raw'])
+                set_cn_font(run, base_cn, en_font=base_en, size_pt=base_size)
+        elif ct == 'strong':  # **加粗**
+            # 递归收集 runs，设置 bold=True
+            tmp = _make_temp_para()
+            walk_inline(tmp, child['children'])
+            for r in tmp.runs:
+                nr = paragraph.add_run(r.text)
+                set_cn_font(nr, base_cn, en_font=base_en, size_pt=base_size, bold=True)
+                if r.font.italic: nr.font.italic = True  # 嵌套斜体
+        elif ct == 'emphasis':  # *斜体*
+            tmp = _make_temp_para()
+            walk_inline(tmp, child['children'])
+            for r in tmp.runs:
+                nr = paragraph.add_run(r.text)
+                set_cn_font(nr, base_cn, en_font=base_en, size_pt=base_size, bold=r.font.bold)
+                nr.font.italic = True
+        elif ct == 'inline_math':  # $...$
+            omml = latex_to_omml(child['raw'], display=False)
+            paragraph._element.append(omml)
+```
+
+`***加粗斜体***` → AST: `emphasis > strong` → 递归自然处理为 bold+italic。
+
+### 标题样式清理
+
+生成前覆盖 Word 内置 Heading 1-6 样式，防止默认蓝色/Cambria/加粗干扰：
+
+```python
+def override_builtin_heading_styles(doc):
+    specs = {
+        'Heading 1': ('黑体', 16, True, WD_ALIGN_PARAGRAPH.CENTER),
+        'Heading 2': ('黑体', 14, False, WD_ALIGN_PARAGRAPH.LEFT),
+        'Heading 3': ('宋体', 12, False, WD_ALIGN_PARAGRAPH.LEFT),
+        'Heading 4': ('宋体', 10.5, False, WD_ALIGN_PARAGRAPH.LEFT),
+        'Heading 5': ('宋体', 10.5, False, WD_ALIGN_PARAGRAPH.LEFT),
+        'Heading 6': ('宋体', 10.5, False, WD_ALIGN_PARAGRAPH.LEFT),
+    }
+    for name, (cn_font, size_pt, bold, align) in specs.items():
+        style = doc.styles[name]
+        style.font.size = Pt(size_pt)
+        style.font.bold = bold
+        style.font.color.rgb = None  # 黑色
+        style.font.italic = False
+        style.font.underline = False
+        rPr = style.element.get_or_add_rPr()
+        rFonts = rPr.find(qn('w:rFonts'))
+        if rFonts is None:
+            rFonts = OxmlElement('w:rFonts'); rPr.insert(0, rFonts)
+        rFonts.set(qn('w:eastAsia'), cn_font)
+```
+
+调用位置：`generate_docx()` 中 `doc = Document()` 后立即执行。
 
 ### 代码块
 
@@ -514,18 +589,23 @@ set_cn_font(run_cont, '宋体', size_pt=10.5)
 - [ ] 表格：三线表(顶/底粗、表头格底线细、数据行无线)、居中
 - [ ] 表头行：居中、9pt、无缩进、tblHeader重复
 - [ ] 表题：10.5pt宋体加粗居中、表格上方
-- [ ] 列表：有序用（1）（2）（3）、无序用•、首行缩进
+- [ ] 列表：有序用 Word 原生编号、无序用 Word 原生黑圆点、悬挂缩进、支持富文本 inline
 - [ ] 代码块：Times New Roman、左缩进、灰色背景#D9D9D9、上下各空一行
+- [ ] 加粗/斜体/加粗斜体：`**文本**` bold、`*文本*` italic、`***文本***` bold+italic
+- [ ] 分隔线：`---`（3+ 连续 `-`） → 分页符
 - [ ] 页眉：左"xxxxx"右题目、9pt黑体
 - [ ] 行内公式：$...$ 嵌于段落、OMML格式、WPS/Word可渲染
 - [ ] 行间公式：$$...$$ OMML居中、上下各空一行、编号(章-序号)右对齐、括号宋体数字TNR
 - [ ] 页码："第×页 共×页"、页脚边距1cm
+- [ ] 标题样式：Heading 1-6 已覆盖为学术格式（黑体/宋体、黑色）
+- [ ] 分隔线：`---` → 分页符
 - [ ] 续表：跨页表头重复、"续表xx"右上标注
 - [ ] 页边距：左3cm 右2cm 上2cm 下2cm
 - [ ] 全部黑色、无额外参数
 
 ## 注意事项
 
+- **解析器**：Markdown 解析使用 mistune 3.x（`renderer='ast'`），配合 `table` 和 `math` 插件。所有 block/inline 格式由 mistune AST 提供，不再手写解析器
 - **第一个 `#` 是题目**（不设 outline），后续 `#` 是一级标题（outline_level=1）；若无 `#` 标题仍可正常生成文档
 - **图片尺寸用 `Cm()`，不手算 EMU** — `add_picture(width=Cm(x))` 自动转换
 - **图片下载必设 User-Agent** — 否则 CDN/Wikipedia 返回 400
