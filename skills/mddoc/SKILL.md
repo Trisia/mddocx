@@ -319,31 +319,27 @@ set_cn_font(r2, '黑体', size_pt=9)
 
 ### 列表
 
-列表使用 Word 原生编号/项目符号（通过 `w:numPr` XML），支持富文本 inline（加粗、斜体、行内公式等）。悬挂缩进：符号悬出，文本缩进对齐。
+使用 Word 原生编号/项目符号（`w:numPr` XML），支持富文本 inline 和多级嵌套。列表段落遵守正文格式（首行缩进 Pt(21)、1.3 倍行距）。
 
 ```python
-# 有序列表 — Word 原生编号 (1, 2, 3...)
+# 有序列表 — numId=50, 多级格式: 1. → a) → i.
+# 无序列表 — numId=51, 多级符号: • → ◦ → ▪
 for item in list_node['children']:
     p = doc.add_paragraph()
+    p.paragraph_format.first_line_indent = Pt(21)  # 同正文
     p.paragraph_format.line_spacing = 1.3
-    p.paragraph_format.left_indent = Cm(0.63)
-    p.paragraph_format.first_line_indent = Cm(-0.63)
     # 设置 Word 原生编号
     numPr = OxmlElement('w:numPr')
-    ilvl = OxmlElement('w:ilvl'); ilvl.set(qn('w:val'), '0')
-    numId = OxmlElement('w:numId'); numId.set(qn('w:val'), '50')  # 50=有序
+    ilvl = OxmlElement('w:ilvl'); ilvl.set(qn('w:val'), str(depth))
+    numId = OxmlElement('w:numId'); numId.set(qn('w:val'), '50')  # 50=有序, 51=无序
     numPr.append(ilvl); numPr.append(numId)
     p._element.get_or_add_pPr().append(numPr)
-    # walk_inline 渲染富文本
+    # walk_inline 渲染富文本（支持 **加粗**、*斜体*、$公式$）
     walk_inline(p, item['children'][0]['children'], '宋体', size_pt=10.5)
-
-# 无序列表 — Word 原生黑圆点 (•)，numId=51
-for item in list_node['children']:
-    # 同上，numId 改为 '51'
-    ...
+    # 嵌套子列表：递归调用 render_list(doc, child, depth+1)
 
 # 列表编号定义（生成文档时需在 numbering.xml 中注入抽象编号）
-_ensure_list_numbering_defs(doc)  # 定义 numId=50(有序) 和 numId=51(无序)
+_ensure_list_numbering_defs(doc)  # 定义 numId=50(有序) 和 numId=51(无序)，各 3 级
 ```
 
 列表编号自动跨页连续（同一 `numId` 的段落由 Word 维护编号序列）。
