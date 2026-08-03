@@ -1439,56 +1439,65 @@ def _ensure_list_numbering_defs(doc):
         if nid in (ORDERED_NUM_ID, UNORDERED_NUM_ID):
             return
 
-    # 抽象编号 0：有序列表 (1, 2, 3...)
+    # 缩进量：Pt(21) = 420 twips，每级增加 420 twips
+    BASE_INDENT = 420  # twips = Pt(21)
+
+    # 抽象编号 0：有序列表 (1, 2, 3..., a, b, c..., i, ii, iii...)
     abs_ord = OxmlElement('w:abstractNum')
     abs_ord.set(qn('w:abstractNumId'), '0')
-    lvl_ord = OxmlElement('w:lvl')
-    lvl_ord.set(qn('w:ilvl'), '0')
-    start_ord = OxmlElement('w:start')
-    start_ord.set(qn('w:val'), '1')
-    lvl_ord.append(start_ord)
-    numFmt_ord = OxmlElement('w:numFmt')
-    numFmt_ord.set(qn('w:val'), 'decimal')
-    lvl_ord.append(numFmt_ord)
-    lvlText_ord = OxmlElement('w:lvlText')
-    lvlText_ord.set(qn('w:val'), '%1.')
-    lvl_ord.append(lvlText_ord)
-    lvlJc_ord = OxmlElement('w:lvlJc')
-    lvlJc_ord.set(qn('w:val'), 'left')
-    lvl_ord.append(lvlJc_ord)
-    pPr_ord = OxmlElement('w:pPr')
-    ind_ord = OxmlElement('w:ind')
-    ind_ord.set(qn('w:left'), '360')
-    ind_ord.set(qn('w:hanging'), '360')
-    pPr_ord.append(ind_ord)
-    lvl_ord.append(pPr_ord)
-    abs_ord.append(lvl_ord)
+    ord_fmts = [('decimal', '%1.'), ('lowerLetter', '%2)'), ('lowerRoman', '%3.')]
+    for ilvl_val, (fmt, lvl_text) in enumerate(ord_fmts):
+        lvl = OxmlElement('w:lvl')
+        lvl.set(qn('w:ilvl'), str(ilvl_val))
+        start = OxmlElement('w:start')
+        start.set(qn('w:val'), '1')
+        lvl.append(start)
+        numFmt = OxmlElement('w:numFmt')
+        numFmt.set(qn('w:val'), fmt)
+        lvl.append(numFmt)
+        lvlText = OxmlElement('w:lvlText')
+        lvlText.set(qn('w:val'), lvl_text)
+        lvl.append(lvlText)
+        lvlJc = OxmlElement('w:lvlJc')
+        lvlJc.set(qn('w:val'), 'left')
+        lvl.append(lvlJc)
+        pPr = OxmlElement('w:pPr')
+        ind = OxmlElement('w:ind')
+        left_val = BASE_INDENT * (ilvl_val + 1)
+        ind.set(qn('w:left'), str(left_val))
+        ind.set(qn('w:hanging'), str(BASE_INDENT))
+        pPr.append(ind)
+        lvl.append(pPr)
+        abs_ord.append(lvl)
     numbering_elem.append(abs_ord)
 
-    # 抽象编号 1：无序列表 (• bullet)
+    # 抽象编号 1：无序列表 (•, ◦, ▪)
     abs_unord = OxmlElement('w:abstractNum')
     abs_unord.set(qn('w:abstractNumId'), '1')
-    lvl_unord = OxmlElement('w:lvl')
-    lvl_unord.set(qn('w:ilvl'), '0')
-    start_unord = OxmlElement('w:start')
-    start_unord.set(qn('w:val'), '1')
-    lvl_unord.append(start_unord)
-    numFmt_unord = OxmlElement('w:numFmt')
-    numFmt_unord.set(qn('w:val'), 'bullet')
-    lvl_unord.append(numFmt_unord)
-    lvlText_unord = OxmlElement('w:lvlText')
-    lvlText_unord.set(qn('w:val'), '•')
-    lvl_unord.append(lvlText_unord)
-    lvlJc_unord = OxmlElement('w:lvlJc')
-    lvlJc_unord.set(qn('w:val'), 'left')
-    lvl_unord.append(lvlJc_unord)
-    pPr_unord = OxmlElement('w:pPr')
-    ind_unord = OxmlElement('w:ind')
-    ind_unord.set(qn('w:left'), '360')
-    ind_unord.set(qn('w:hanging'), '360')
-    pPr_unord.append(ind_unord)
-    lvl_unord.append(pPr_unord)
-    abs_unord.append(lvl_unord)
+    bull_chars = ['•', '◦', '▪']
+    for ilvl_val, bull_char in enumerate(bull_chars):
+        lvl = OxmlElement('w:lvl')
+        lvl.set(qn('w:ilvl'), str(ilvl_val))
+        start = OxmlElement('w:start')
+        start.set(qn('w:val'), '1')
+        lvl.append(start)
+        numFmt = OxmlElement('w:numFmt')
+        numFmt.set(qn('w:val'), 'bullet')
+        lvl.append(numFmt)
+        lvlText = OxmlElement('w:lvlText')
+        lvlText.set(qn('w:val'), bull_char)
+        lvl.append(lvlText)
+        lvlJc = OxmlElement('w:lvlJc')
+        lvlJc.set(qn('w:val'), 'left')
+        lvl.append(lvlJc)
+        pPr = OxmlElement('w:pPr')
+        ind = OxmlElement('w:ind')
+        left_val = BASE_INDENT * (ilvl_val + 1)
+        ind.set(qn('w:left'), str(left_val))
+        ind.set(qn('w:hanging'), str(BASE_INDENT))
+        pPr.append(ind)
+        lvl.append(pPr)
+        abs_unord.append(lvl)
     numbering_elem.append(abs_unord)
 
     # num 实例：有序列表 → numId=50
@@ -1528,12 +1537,13 @@ def _set_list_num_pr(paragraph, ordered=False, level=0):
     pPr.append(numPr)
 
 
-def _render_list(doc, node):
-    """渲染 Word 原生列表（有序/无序），列表项支持富文本 inline
+def _render_list(doc, node, depth=0):
+    """渲染 Word 原生列表（有序/无序），支持多级嵌套和富文本 inline
 
     参数：
         doc: python-docx Document 对象
         node: mistune list AST 节点
+        depth: 列表嵌套层级（0=顶层）
     """
     ordered = node.get('attrs', {}).get('ordered', False) if 'attrs' in node else node.get('ordered', False)
 
@@ -1542,19 +1552,22 @@ def _render_list(doc, node):
             continue
 
         p = doc.add_paragraph()
+        # 遵守正文段落设定：首行缩进 Pt(21)，1.3 倍行距
+        p.paragraph_format.first_line_indent = Pt(21)
         p.paragraph_format.line_spacing = 1.3
         p.paragraph_format.space_before = Pt(0)
         p.paragraph_format.space_after = Pt(0)
-        p.paragraph_format.left_indent = Cm(0.63)
-        p.paragraph_format.first_line_indent = Cm(-0.63)
 
-        _set_list_num_pr(p, ordered=ordered, level=0)
+        _set_list_num_pr(p, ordered=ordered, level=depth)
 
         for child in item.get('children', []):
             if child['type'] == 'block_text':
                 walk_inline(p, child.get('children', []))
             elif child['type'] == 'paragraph':
                 walk_inline(p, child.get('children', []))
+            elif child['type'] == 'list':
+                # 嵌套子列表：递归渲染
+                _render_list(doc, child, depth=depth + 1)
 
 
 def _render_table(doc, node, caption, tab_counter, chapter_path, has_chapter):
