@@ -410,12 +410,12 @@ def override_builtin_heading_styles(doc):
 
 ### 代码块
 
-Times New Roman 字体、五号、左缩进、灰色背景(#D9D9D9)、上下各空一行。
+Times New Roman 字体、五号、无首行缩进、灰色背景(#D9D9D9)、上下各空一行。
 
 ```python
 add_empty(doc)
 p = doc.add_paragraph()
-p.paragraph_format.left_indent = Cm(1)
+set_first_line_indent_chars(p, 0)  # 代码块无首行缩进
 # 灰色背景
 pPr = p._element.get_or_add_pPr()
 shd = OxmlElement('w:shd')
@@ -586,7 +586,7 @@ set_cn_font(run_cont, '宋体', size_pt=10.5)
 - [ ] 表头行：居中、9pt、无缩进、tblHeader重复
 - [ ] 表题：10.5pt宋体加粗居中、表格上方
 - [ ] 列表：有序用 Word 原生编号、无序用 Word 原生黑圆点、悬挂缩进、支持富文本 inline
-- [ ] 代码块：Times New Roman、左缩进、灰色背景#D9D9D9、上下各空一行
+- [ ] 代码块：Times New Roman、无缩进、灰色背景#D9D9D9、上下各空一行
 - [ ] 加粗/斜体/加粗斜体：`**文本**` bold、`*文本*` italic、`***文本***` bold+italic
 - [ ] 分隔线：`---`（3+ 连续 `-`） → 分页符
 - [ ] 页眉：左"xxxxx"右题目、9pt黑体
@@ -606,7 +606,7 @@ set_cn_font(run_cont, '宋体', size_pt=10.5)
 - **图片尺寸用 `Cm()`，不手算 EMU** — `add_picture(width=Cm(x))` 自动转换
 - **图片下载必设 User-Agent** — 否则 CDN/Wikipedia 返回 400
 - **图题编号自动生成** — alt text 作为描述文字，图/表编号独立逐章编序
-- **表题识别** — 表格前含"表"字的段落作为表题
+- **表题识别** — 表格前含"表"字的段落自动作为表题（lookahead 跳过空行），不渲染为独立段落
 - **outline_level 用 `set_outline()` 设置** — `paragraph_format.outline_level` 在部分python-docx版本不生效，统一用XML方式写入；读取时也从XML读取
 - **公式编号自动生成** — 图/表/公式独立逐章编序，编号格式统一为 `章-序号`
 - **不添加**：目录页、背景色

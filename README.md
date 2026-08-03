@@ -79,11 +79,13 @@ python skills/mddoc/scripts/md2docx.py --text "# 标题\n\n正文" -o out.docx
 | 图题 | 小五(9pt)宋体加粗居中、"图1-1 xxx"格式 |
 | 表题 | 五号(10.5pt)宋体加粗居中、"表1-1 xxx"格式 |
 | 页码 | "第×页 共×页"、页脚边距1cm |
-| 列表 | 有序列表用（1）（2）（3）序号 |
-| 行内公式 | $...$ 转 OMML、嵌于段落 |
+| 列表 | Word 原生编号/项目符号、首行缩进2字符、多级嵌套(3级) |
+| 加粗/斜体 | `**加粗**` bold、`*斜体*` italic、`***加粗斜体***` bold+italic |
+| 分隔线 | `---` → 分页符 |
+| 行内公式 | $...$ 转 OMML、嵌于段落、与加粗斜体共存 |
 | 行间公式 | $$...$$ 转 OMML 居中、编号(章-序号)右对齐 |
-| LaTeX 环境 | matrix/bmatrix/pmatrix/vmatrix 矩阵、cases 分段函数 |
-| 代码块 | Courier New 等宽、五号、左缩进 |
+| LaTeX 环境 | matrix/bmatrix/pmatrix/vmatrix 矩阵、cases 分段函数、align 多行对齐 |
+| 代码块 | 等宽字体、五号、灰色背景 |
 | 页边距 | 左3cm 右2cm 上2cm 下2cm |
 
 ## 升级
