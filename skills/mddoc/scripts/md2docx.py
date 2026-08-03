@@ -1611,14 +1611,19 @@ def _render_table(doc, node, tab_counter, chapter_path, has_chapter):
 
     for c in children:
         if c['type'] == 'table_head':
-            for row in c.get('children', []):
-                for cell in row.get('children', []):
+            # table_head 的子节点直接是 table_cell（无 row 包装）
+            for cell in c.get('children', []):
+                if cell['type'] == 'table_cell':
                     head_cells.append(_extract_ast_text(cell.get('children', [])))
         elif c['type'] == 'table_body':
+            # table_body > table_row > table_cell
             for row in c.get('children', []):
+                if row['type'] != 'table_row':
+                    continue
                 row_data = []
                 for cell in row.get('children', []):
-                    row_data.append(_extract_ast_text(cell.get('children', [])))
+                    if cell['type'] == 'table_cell':
+                        row_data.append(_extract_ast_text(cell.get('children', [])))
                 body_rows.append(row_data)
 
     if not head_cells:
@@ -1690,18 +1695,23 @@ def _render_display_math(doc, math_text, chapter_path, eq_counter, has_chapter):
         omml = None
 
     if omml is not None and omml.tag == f'{{{NSM}}}oMathPara':
-        add_empty_para(doc)
-        p_align = doc.add_paragraph()
-        p_align.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        lines = list(omml)
-        for idx, line_omml in enumerate(lines):
-            if idx > 0:
-                br_run = p_align.add_run()
-                br = OxmlElement('w:br')
-                br_run._r.append(br)
-            p_align._element.append(line_omml)
-        add_empty_para(doc)
-        return
+        # oMathPara 可能来自 align 多行环境，或 latex_to_omml(display=True) 对单行公式的包装
+        omath_children = [c for c in list(omml) if c.tag == f'{{{NSM}}}oMath']
+        if len(omath_children) > 1:
+            # align 等多行公式：oMath 以 <w:br/> 分隔
+            add_empty_para(doc)
+            p_align = doc.add_paragraph()
+            p_align.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            for idx, line_omml in enumerate(omath_children):
+                if idx > 0:
+                    br_run = p_align.add_run()
+                    br = OxmlElement('w:br')
+                    br_run._r.append(br)
+                p_align._element.append(line_omml)
+            add_empty_para(doc)
+            return
+        # 单行公式：提取 oMath，走下方编号路径
+        omml = omath_children[0] if omath_children else omml
 
     add_empty_para(doc)
     p = doc.add_paragraph()
