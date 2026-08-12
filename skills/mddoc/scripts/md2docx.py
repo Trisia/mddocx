@@ -23,6 +23,7 @@ import mistune
 from mistune.plugins import table as mistune_table, math as mistune_math
 
 from docx import Document
+from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
@@ -1085,6 +1086,25 @@ def set_run_font(run, cn_font, en_font="Times New Roman", size_pt=10.5, bold=Fal
     rFonts.set(qn('w:hAnsi'), en_font)
 
 
+def _set_para_mark_size(paragraph, size_pt):
+    """设置段落标记字号（半磅），供行内公式 OMML 继承
+
+    参数：
+        paragraph: python-docx Paragraph 对象
+        size_pt: 字号，单位 pt（如 9 → 9pt）
+    """
+    pPr = paragraph._element.get_or_add_pPr()
+    rPr = pPr.find(qn('w:rPr'))
+    if rPr is None:
+        rPr = OxmlElement('w:rPr')
+        pPr.append(rPr)
+    sz = rPr.find(qn('w:sz'))
+    if sz is None:
+        sz = OxmlElement('w:sz')
+        rPr.append(sz)
+    sz.set(qn('w:val'), str(int(size_pt * 2)))
+
+
 def add_empty_para(doc):
     """添加五号空行"""
     p = doc.add_paragraph()
@@ -1644,7 +1664,7 @@ def _render_table(doc, node, tab_counter, chapter_path, has_chapter, caption='')
             # table_head 的子节点直接是 table_cell（无 row 包装）
             for cell in c.get('children', []):
                 if cell['type'] == 'table_cell':
-                    head_cells.append(_extract_ast_text(cell.get('children', [])))
+                    head_cells.append(cell.get('children', []))
         elif c['type'] == 'table_body':
             # table_body > table_row > table_cell
             for row in c.get('children', []):
@@ -1653,7 +1673,7 @@ def _render_table(doc, node, tab_counter, chapter_path, has_chapter, caption='')
                 row_data = []
                 for cell in row.get('children', []):
                     if cell['type'] == 'table_cell':
-                        row_data.append(_extract_ast_text(cell.get('children', [])))
+                        row_data.append(cell.get('children', []))
                 body_rows.append(row_data)
 
     if not head_cells:
@@ -1663,7 +1683,7 @@ def _render_table(doc, node, tab_counter, chapter_path, has_chapter, caption='')
 
     # 表题文本：优先使用传入的 caption，否则回退到第一列表头
     if not caption:
-        caption = head_cells[0] if head_cells else ''
+        caption = _extract_ast_text(head_cells[0]) if head_cells else ''
     tab_key = tuple(chapter_path[:1]) if has_chapter else None
     if tab_key:
         tab_counter[tab_key] = tab_counter.get(tab_key, 0) + 1
@@ -1689,23 +1709,33 @@ def _render_table(doc, node, tab_counter, chapter_path, has_chapter, caption='')
     trPr = table.rows[0]._tr.get_or_add_trPr()
     trPr.append(tblHeader_el)
 
-    for j, cell_text in enumerate(head_cells):
+    for j, cell_children in enumerate(head_cells):
         cell = table.rows[0].cells[j]
-        cell.paragraphs[0].clear()
-        cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = cell.paragraphs[0].add_run(cell_text)
-        set_run_font(run, '宋体', size_pt=9)
-        cell.paragraphs[0].paragraph_format.first_line_indent = Pt(0)
+        cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+        p = cell.paragraphs[0]
+        p.clear()
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p.paragraph_format.first_line_indent = Pt(0)
+        p.paragraph_format.line_spacing = 1.0
+        p.paragraph_format.space_before = Pt(0)
+        p.paragraph_format.space_after = Pt(0)
+        _set_para_mark_size(p, 9)
+        walk_inline(p, cell_children, base_size=9)
 
     for i, row_data in enumerate(body_rows):
-        for j, cell_text in enumerate(row_data):
+        for j, cell_children in enumerate(row_data):
             if j < ncols:
                 cell = table.rows[i + 1].cells[j]
-                cell.paragraphs[0].clear()
-                cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT
-                run = cell.paragraphs[0].add_run(cell_text)
-                set_run_font(run, '宋体', size_pt=9)
-                cell.paragraphs[0].paragraph_format.first_line_indent = Pt(0)
+                cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+                p = cell.paragraphs[0]
+                p.clear()
+                p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                p.paragraph_format.first_line_indent = Pt(0)
+                p.paragraph_format.line_spacing = 1.0
+                p.paragraph_format.space_before = Pt(0)
+                p.paragraph_format.space_after = Pt(0)
+                _set_para_mark_size(p, 9)
+                walk_inline(p, cell_children, base_size=9)
 
     add_empty_para(doc)
 
