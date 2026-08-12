@@ -9,7 +9,7 @@
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue?logo=python)](https://python.org)
 [![CI](https://github.com/Trisia/mddocx/actions/workflows/release.yml/badge.svg)](https://github.com/Trisia/mddocx/actions/workflows/release.yml)
-[![Clawhub](https://img.shields.io/badge/Clawhub-mddocx-8b5cf6)](https://clawhub.ai/Trisia/mddoc)
+[![Clawhub](https://img.shields.io/badge/Clawhub-mddocx-8b5cf6)](https://clawhub.ai/trisia/skills/mddoc)
 
 将 Markdown 转换为符合学术规范的 Word 文档的Agent Skill，支持 LaTeX 公式（OMML，含矩阵/分段函数等环境）、三线表、图题/表题自动编号、页码、页眉等学术论文排版规范。
 
@@ -17,19 +17,19 @@
 
 ## 安装
 
-### 🤖 一键安装
+npm 全平台通用：
 
-将以下内容复制粘贴给任意智能体（Claude Code / Codex / OpenCode / Cursor）即可安装。
-
-> 各平台专属安装说明详见 **[INSTALL.md](INSTALL.md)**。
-
-```copy
-请根据 https://github.com/Trisia/mddocx/blob/main/INSTALL.md 中对应平台的说明，帮我安装 mddocx
+```bash
+npm install -g @cliven/mddocx
 ```
+
+Python 依赖由 `setup_env.py` 自动安装，详见下方「依赖」。
+
+> 各平台专属安装/升级说明（Claude Code / Codex / OpenCode / Cursor / Claude PluginHub / ClawHub）详见 **[INSTALL.md](INSTALL.md)**。
 
 ### 依赖
 
-Python 依赖装在专用虚拟环境 `~/.cache/mddocx/venv`（Windows: `%LOCALAPPDATA%/mddocx/venv`），不污染用户项目目录。执行环境自检：**仅当环境缺失或依赖缺失时才创建/安装**（幂等）：
+Python 依赖装在专用虚拟环境 `~/.cache/mddocx/venv`（Windows: `%LOCALAPPDATA%/mddocx/venv`），不污染用户项目目录。执行环境自检：**仅当环境缺失或依赖缺失时才创建/安装**（幂等，pip 走清华镜像源）：
 
 ```bash
 python3 skills/mddoc/scripts/setup_env.py
@@ -116,9 +116,25 @@ cp -rf /tmp/mddocx/skills/mddoc ~/.claude/skills/mddoc
 
 更新 `opencode.json` 中的插件引用，重启即可自动拉取最新版本。
 
+### Claude PluginHub
+
+Claude Code 内重新安装即更新
+
+```copy
+/plugin install trisia-mddocx@cpd-trisia-mddocx   
+```
+
+### ClawHub（openclaw CLI，非 Claude 插件）
+重新安装拉取最新版
+```bash
+openclaw skills install @trisia/mddoc  
+```
+
 ### Python 依赖
 
+执行下面检查脚本进行运行环境检查和安装
+
 ```bash
-pip install --upgrade python-docx Pillow requests mistune
+python3 skills/mddoc/scripts/setup_env.py   # 幂等,自动补齐缺失依赖
 ```
 

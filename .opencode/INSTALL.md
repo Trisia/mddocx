@@ -14,10 +14,10 @@
 
 2. 重启 OpenCode，插件自动加载。
 
-3. 确保已安装 Python 依赖：
+3. 准备 Python 依赖（自动）：
 
 ```bash
-pip install python-docx Pillow requests mistune
+python3 skills/mddoc/scripts/setup_env.py
 ```
 
 ## 使用

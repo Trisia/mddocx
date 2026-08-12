@@ -22,6 +22,8 @@ from pathlib import Path
 
 REQUIRED_MODULES = ['docx', 'PIL', 'requests', 'mistune']
 PIP_PACKAGES = 'python-docx Pillow requests mistune'
+# 清华 PyPI 镜像源，国内安装加速
+PIP_INDEX = 'https://pypi.tuna.tsinghua.edu.cn/simple'
 
 
 def venv_dir() -> Path:
@@ -98,8 +100,9 @@ def main() -> int:
 
         # 3) 依赖缺失 → 仅此时安装
         pip = venv / bin_dir(venv) / ('pip.exe' if sys.platform == 'win32' else 'pip')
-        print(f'[mddoc] 安装缺失依赖: {PIP_PACKAGES}', file=sys.stderr)
-        subprocess.run([str(pip), 'install', '--disable-pip-version-check']
+        print(f'[mddoc] 安装缺失依赖: {PIP_PACKAGES}（镜像: {PIP_INDEX}）', file=sys.stderr)
+        subprocess.run([str(pip), 'install', '--disable-pip-version-check',
+                        '-i', PIP_INDEX]
                        + PIP_PACKAGES.split(), check=True)
     except subprocess.CalledProcessError as exc:
         print(f'[mddoc] 环境准备失败: {exc}', file=sys.stderr)
