@@ -9,3 +9,4 @@ venv/
 node_modules/
 # Skill evals are part of the project — do NOT ignore
 # evals/
+docs/

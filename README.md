@@ -29,8 +29,10 @@
 
 ### 依赖
 
+Python 依赖装在专用虚拟环境 `~/.cache/mddocx/venv`（Windows: `%LOCALAPPDATA%/mddocx/venv`），不污染用户项目目录。执行环境自检：**仅当环境缺失或依赖缺失时才创建/安装**（幂等）：
+
 ```bash
-pip install python-docx Pillow requests mistune
+python3 skills/mddoc/scripts/setup_env.py
 ```
 
 ## 使用

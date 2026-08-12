@@ -188,14 +188,11 @@ pip install --upgrade python-docx Pillow requests mistune
 
 ## 依赖
 
-所有平台均需 Python 依赖：
+所有平台均需 Python 依赖，装在专用虚拟环境 `~/.cache/mddocx/venv`（Windows: `%LOCALAPPDATA%/mddocx/venv`），不污染用户项目目录。执行环境自检：环境就绪则零操作，**仅当环境缺失或依赖缺失时才创建/安装**（幂等，可重复执行）：
 
 ```bash
-# 推荐虚拟环境
-python3 -m venv .venv
-source .venv/bin/activate  # Linux/macOS
-
-pip install python-docx Pillow requests mistune
+# 环境自检与准备（一次性）
+python3 skills/mddoc/scripts/setup_env.py
 ```
 
-> 若提示 `externally-managed-environment`，使用虚拟环境或 `--break-system-packages`。
+> 若提示 `externally-managed-environment`，请使用 `setup_env.py`（自动使用 venv）而非系统 pip。
