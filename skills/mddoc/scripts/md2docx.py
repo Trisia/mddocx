@@ -1372,13 +1372,34 @@ def _extract_ast_text(children):
     return ''.join(parts)
 
 
-def _make_temp_para():
-    """创建临时段落对象，用于收集嵌套 inline 的 runs 序列"""
-    tmp_doc = Document()
-    return tmp_doc.add_paragraph()
+def _apply_omml_style(omml, bold=False, italic=False):
+    """为 OMML 内所有 m:r 应用加粗/斜体样式（m:sty）
+
+    参数：
+        omml: m:oMath 元素
+        bold: 是否加粗
+        italic: 是否斜体（默认数学即斜体，仅强加时设置）
+
+    返回:
+        应用样式后的 omml（原地修改）
+    """
+    if not (bold or italic):
+        return omml
+    val = ('b' if bold else '') + ('i' if italic else '')
+    for r in omml.iter(f'{{{NSM}}}r'):
+        rPr = r.find(f'{{{NSM}}}rPr')
+        if rPr is None:
+            rPr = _m_elem('rPr')
+            r.insert(0, rPr)
+        if rPr.find(f'{{{NSM}}}sty') is None:
+            sty = _m_elem('sty')
+            sty.set(_m_qn('val'), val)
+            rPr.append(sty)
+    return omml
 
 
-def walk_inline(paragraph, children, base_cn='宋体', base_en='Times New Roman', base_size=10.5):
+def walk_inline(paragraph, children, base_cn='宋体', base_en='Times New Roman',
+                base_size=10.5, bold=False, italic=False, underline=False):
     """递归遍历 inline AST，将格式化文本和 OMML 公式附加到段落
 
     参数：
@@ -1387,6 +1408,9 @@ def walk_inline(paragraph, children, base_cn='宋体', base_en='Times New Roman'
         base_cn: 中文字体名（默认 '宋体'）
         base_en: 英文字体名（默认 'Times New Roman'）
         base_size: 基础字号，单位 pt（默认 10.5）
+        bold: 加粗状态（嵌套 strong 递归传 True）
+        italic: 斜体状态（嵌套 emphasis 递归传 True）
+        underline: 下划线状态（嵌套 link 递归传 True）
     """
     for child in children:
         ct = child['type']
@@ -1395,34 +1419,28 @@ def walk_inline(paragraph, children, base_cn='宋体', base_en='Times New Roman'
             raw = child.get('raw', '')
             if raw:
                 run = paragraph.add_run(raw)
-                set_run_font(run, base_cn, en_font=base_en, size_pt=base_size)
+                set_run_font(run, base_cn, en_font=base_en, size_pt=base_size, bold=bold)
+                if italic:
+                    run.font.italic = True
+                if underline:
+                    run.font.underline = True
 
         elif ct == 'strong':
-            tmp_para = _make_temp_para()
-            walk_inline(tmp_para, child.get('children', []), base_cn, base_en, base_size)
-            for r in tmp_para.runs:
-                is_italic = r.font.italic
-                new_run = paragraph.add_run(r.text)
-                set_run_font(new_run, base_cn, en_font=base_en, size_pt=base_size, bold=True)
-                if is_italic:
-                    new_run.font.italic = True
+            walk_inline(paragraph, child.get('children', []), base_cn, base_en, base_size,
+                        bold=True, italic=italic, underline=underline)
 
         elif ct == 'emphasis':
-            tmp_para = _make_temp_para()
-            walk_inline(tmp_para, child.get('children', []), base_cn, base_en, base_size)
-            for r in tmp_para.runs:
-                is_bold = r.font.bold
-                new_run = paragraph.add_run(r.text)
-                set_run_font(new_run, base_cn, en_font=base_en, size_pt=base_size, bold=is_bold)
-                new_run.font.italic = True
+            walk_inline(paragraph, child.get('children', []), base_cn, base_en, base_size,
+                        bold=bold, italic=True, underline=underline)
 
         elif ct == 'inline_math':
             try:
                 omml = latex_to_omml(child['raw'], display=False)
+                omml = _apply_omml_style(omml, bold, italic)
                 paragraph._element.append(omml)
             except Exception:
                 run = paragraph.add_run(child.get('raw', ''))
-                set_run_font(run, base_cn, en_font=base_en, size_pt=base_size)
+                set_run_font(run, base_cn, en_font=base_en, size_pt=base_size, bold=bold)
                 run.font.italic = True
 
         elif ct == 'codespan':
@@ -1430,12 +1448,8 @@ def walk_inline(paragraph, children, base_cn='宋体', base_en='Times New Roman'
             set_run_font(run, base_cn, en_font=base_en, size_pt=base_size)
 
         elif ct == 'link':
-            tmp_para = _make_temp_para()
-            walk_inline(tmp_para, child.get('children', []), base_cn, base_en, base_size)
-            for r in tmp_para.runs:
-                new_run = paragraph.add_run(r.text)
-                set_run_font(new_run, base_cn, en_font=base_en, size_pt=base_size)
-                new_run.font.underline = True
+            walk_inline(paragraph, child.get('children', []), base_cn, base_en, base_size,
+                        bold=bold, italic=italic, underline=True)
 
         elif ct == 'image':
             url = child.get('attrs', {}).get('url', '')
