@@ -279,22 +279,29 @@ for cell in tb.rows[0].cells:
     btm.set(qn('w:space'),'0'); btm.set(qn('w:color'),'000000')
     tcB.append(btm); tcPr.append(tcB)
 
-# 表头行 — 居中、9pt、无缩进
-for j, txt in enumerate(header):
-    c = tb.rows[0].cells[j]; c.paragraphs[0].clear()
-    c.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = c.paragraphs[0].add_run(txt)
-    set_cn_font(run, '宋体', size_pt=9)
-    c.paragraphs[0].paragraph_format.first_line_indent = Pt(0)
+# header/data 为 mistune table_cell['children'] AST 列表（取 cell.get('children', [])）
+# 单元格内 **加粗**、*斜体*、$公式$ 由 walk_inline 渲染，公式字号跟随 9pt
+# 表头行 — 居中、9pt、垂直居中、无缩进
+for j, children in enumerate(header):
+    c = tb.rows[0].cells[j]
+    c.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+    p = c.paragraphs[0]; p.clear()
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p.paragraph_format.first_line_indent = Pt(0)
+    p.paragraph_format.line_spacing = 1.0
+    _set_para_mark_size(p, 9)
+    walk_inline(p, children, '宋体', size_pt=9)
 
-# 数据行 — 左对齐、9pt、无缩进
+# 数据行 — 左对齐、9pt、垂直居中、无缩进
 for i, row in enumerate(data):
-    for j, txt in enumerate(row):
-        c = tb.rows[i+1].cells[j]; c.paragraphs[0].clear()
-        c.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT
-        run = c.paragraphs[0].add_run(txt)
-        set_cn_font(run, '宋体', size_pt=9)
-        c.paragraphs[0].paragraph_format.first_line_indent = Pt(0)
+    for j, children in enumerate(row):
+        c = tb.rows[i+1].cells[j]
+        c.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+        p = c.paragraphs[0]; p.clear()
+        p.paragraph_format.first_line_indent = Pt(0)
+        p.paragraph_format.line_spacing = 1.0
+        _set_para_mark_size(p, 9)
+        walk_inline(p, children, '宋体', size_pt=9)
 
 add_empty(doc)  # 表格下方空一行
 ```
@@ -342,37 +349,69 @@ _ensure_list_numbering_defs(doc)  # 定义 numId=50(有序) 和 numId=51(无序)
 
 ### 内联格式（加粗、斜体、行内公式等）
 
-段落内使用 `walk_inline()` 递归遍历 mistune inline AST，生成带格式的 runs 和 OMML 元素：
+段落内使用 `walk_inline()` 递归遍历 mistune inline AST，生成带格式的 runs 和 OMML 元素。格式状态（加粗/斜体/下划线）递归下传，同时作用于文本 run 和公式 OMML：
 
 ```python
-def walk_inline(paragraph, children, base_cn='宋体', base_en='Times New Roman', base_size=10.5):
+def walk_inline(paragraph, children, base_cn='宋体', base_en='Times New Roman',
+                base_size=10.5, bold=False, italic=False, underline=False):
     for child in children:
         ct = child['type']
         if ct == 'text':
             if child.get('raw', ''):
                 run = paragraph.add_run(child['raw'])
-                set_cn_font(run, base_cn, en_font=base_en, size_pt=base_size)
-        elif ct == 'strong':  # **加粗**
-            # 递归收集 runs，设置 bold=True
-            tmp = _make_temp_para()
-            walk_inline(tmp, child['children'])
-            for r in tmp.runs:
-                nr = paragraph.add_run(r.text)
-                set_cn_font(nr, base_cn, en_font=base_en, size_pt=base_size, bold=True)
-                if r.font.italic: nr.font.italic = True  # 嵌套斜体
-        elif ct == 'emphasis':  # *斜体*
-            tmp = _make_temp_para()
-            walk_inline(tmp, child['children'])
-            for r in tmp.runs:
-                nr = paragraph.add_run(r.text)
-                set_cn_font(nr, base_cn, en_font=base_en, size_pt=base_size, bold=r.font.bold)
-                nr.font.italic = True
+                set_cn_font(run, base_cn, en_font=base_en, size_pt=base_size, bold=bold)
+                if italic: run.font.italic = True
+                if underline: run.font.underline = True
+        elif ct == 'strong':  # **加粗** — 递归传 bold=True
+            walk_inline(paragraph, child['children'], base_cn, base_en, base_size,
+                        bold=True, italic=italic, underline=underline)
+        elif ct == 'emphasis':  # *斜体* — 递归传 italic=True
+            walk_inline(paragraph, child['children'], base_cn, base_en, base_size,
+                        bold=bold, italic=True, underline=underline)
+        elif ct == 'link':  # 链接 — 递归传 underline=True
+            walk_inline(paragraph, child['children'], base_cn, base_en, base_size,
+                        bold=bold, italic=italic, underline=True)
         elif ct == 'inline_math':  # $...$
             omml = latex_to_omml(child['raw'], display=False)
-            paragraph._element.append(omml)
+            paragraph._element.append(apply_omml_style(omml, bold, italic))
+        elif ct == 'codespan':  # `代码`
+            run = paragraph.add_run(child.get('raw', ''))
+            set_cn_font(run, base_cn, en_font=base_en, size_pt=base_size)
+
+
+def apply_omml_style(omml, bold=False, italic=False):
+    """为公式内所有 m:r 添加 <m:sty m:val="b/i/bi"/>，使 **$x$**、*$x$* 嵌套公式生效"""
+    if not (bold or italic):
+        return omml
+    val = ('b' if bold else '') + ('i' if italic else '')
+    NSM = '{http://schemas.openxmlformats.org/officeDocument/2006/math}'
+    for r in omml.iter(f'{NSM}r'):
+        rPr = r.find(f'{NSM}rPr')
+        if rPr is None:
+            rPr = OxmlElement('m:rPr')
+            r.insert(0, rPr)
+        if rPr.find(f'{NSM}sty') is None:
+            sty = OxmlElement('m:sty')
+            sty.set(qn('m:val'), val)
+            rPr.append(sty)
+    return omml
+
+
+def _set_para_mark_size(paragraph, size_pt):
+    """设置段落标记字号（半磅），供行内公式 OMML 继承（如 9 → 9pt）"""
+    pPr = paragraph._element.get_or_add_pPr()
+    rPr = pPr.find(qn('w:rPr'))
+    if rPr is None:
+        rPr = OxmlElement('w:rPr')
+        pPr.append(rPr)
+    sz = rPr.find(qn('w:sz'))
+    if sz is None:
+        sz = OxmlElement('w:sz')
+        rPr.append(sz)
+    sz.set(qn('w:val'), str(int(size_pt * 2)))
 ```
 
-`***加粗斜体***` → AST: `emphasis > strong` → 递归自然处理为 bold+italic。
+`***加粗斜体***` → AST: `emphasis > strong` → 递归自然处理为 bold+italic。嵌套在加粗/斜体里的公式（`**$x$**`、`*$x$*`）由 `apply_omml_style()` 保留并上样式。
 
 ### 标题样式清理
 
