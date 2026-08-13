@@ -15,9 +15,9 @@
 
 ![MD与DOCX生成效果](./examples/demo.png)
 
-## 安装
+## 1. 安装
 
-### npx skills（推荐，全平台技能安装）
+### 1.1 npx skills（推荐，全平台技能安装）
 
 ```bash
 npx skills add Trisia/mddocx -g -a claude-code codex cursor opencode -y
@@ -25,7 +25,7 @@ npx skills add Trisia/mddocx -g -a claude-code codex cursor opencode -y
 
 安装/升级/路径详见 **[INSTALL.md](INSTALL.md)**。
 
-### npm（全平台通用，安装后可免 `npx` 直接用 `mddocx` 命令）
+### 1.2 npm（全平台通用，安装后可免 `npx` 直接用 `mddocx` 命令）
 
 ```bash
 npm install -g @cliven/mddocx
@@ -35,25 +35,10 @@ Python 依赖由 `setup_env.py` 自动安装，详见下方「依赖」。
 
 > 各平台专属安装/升级说明（Claude Code / Codex / OpenCode / Cursor / Claude PluginHub / ClawHub）详见 **[INSTALL.md](INSTALL.md)**。
 
-### 依赖
 
-Python 依赖装在专用虚拟环境 `~/.cache/mddocx/venv`（Windows: `%LOCALAPPDATA%/mddocx/venv`），不污染用户项目目录。执行环境自检：**仅当环境缺失或依赖缺失时才创建/安装**（幂等，pip 走清华镜像源）：
+## 2. 使用
 
-```bash
-python3 skills/mddoc/scripts/setup_env.py
-```
-
-## 使用
-
-### npx（无需安装）
-
-```bash
-npx @cliven/mddocx paper.md                    # 转换文件
-npx @cliven/mddocx paper.md -o output.docx     # 指定输出
-npx @cliven/mddocx --text "# 标题" -o out.docx # 转换文本
-```
-
-### Agent 中使用（npx skills 安装后）
+### 2.1 Agent 中使用（通过 npx skills 选用）
 
 装到哪个 Agent，就在哪个 Agent 内用 `/mddoc` 触发：
 
@@ -63,7 +48,17 @@ npx @cliven/mddocx --text "# 标题" -o out.docx # 转换文本
 /mddoc 把这段内容转成Word         # 粘贴 Markdown 文本
 ```
 
-### 命令行直接使用
+
+### 2.2 npx（通过npm安装选用）
+
+```bash
+npx @cliven/mddocx paper.md                    # 转换文件
+npx @cliven/mddocx paper.md -o output.docx     # 指定输出
+npx @cliven/mddocx --text "# 标题" -o out.docx # 转换文本
+```
+
+
+### 2.3 命令行直接使用
 
 ```bash
 # 转换文件（输出到同目录）
@@ -76,7 +71,7 @@ python skills/mddoc/scripts/md2docx.py paper.md -o output.docx
 python skills/mddoc/scripts/md2docx.py --text "# 标题\n\n正文" -o out.docx
 ```
 
-## 格式规范
+## 3. 文档格式规范
 
 生成的文档自动应用以下学术排版规范：
 
@@ -91,6 +86,8 @@ python skills/mddoc/scripts/md2docx.py --text "# 标题\n\n正文" -o out.docx
 | 图题 | 小五(9pt)宋体加粗居中、"图1-1 xxx"格式 |
 | 表题 | 五号(10.5pt)宋体加粗居中、"表1-1 xxx"格式 |
 | 页码 | "第×页 共×页"、页脚边距1cm |
+| 页眉 | 黑体9pt、左固定"xxxxx"、右为文档题目（无题目显示"未命名文档"） |
+| 页脚 | 居中"第×页 共×页"（宋体10.5pt、PAGE/NUMPAGES域）、距底边1cm |
 | 列表 | Word 原生编号/项目符号、首行缩进2字符、多级嵌套(3级) |
 | 加粗/斜体 | `**加粗**` bold、`*斜体*` italic、`***加粗斜体***` bold+italic |
 | 分隔线 | `---` → 分页符 |
@@ -100,15 +97,15 @@ python skills/mddoc/scripts/md2docx.py --text "# 标题\n\n正文" -o out.docx
 | 代码块 | 等宽字体、五号、灰色背景 |
 | 页边距 | 左3cm 右2cm 上2cm 下2cm |
 
-## 升级
+## 4. 升级
 
-### npx skills（npx skills 方式安装的）
+### 4.1 npx skills（npx skills 方式安装的）
 
 ```bash
 npx skills update   # 更新所有已安装技能到最新版
 ```
 
-### npm
+### 4.2 npm
 
 ```bash
 npm update -g @cliven/mddocx       # 全局安装升级
@@ -117,7 +114,13 @@ npx @cliven/mddocx@latest paper.md # npx 始终使用最新版
 
 > 其他平台（Claude Code / Codex / Cursor / OpenCode / Claude PluginHub / ClawHub）升级方式详见 **[INSTALL.md](INSTALL.md)**。
 
-### Python 依赖
+## 5. Python 依赖
+
+Python 依赖装在专用虚拟环境 `~/.cache/mddocx/venv`（Windows: `%LOCALAPPDATA%/mddocx/venv`）.
+
+每次执行时执行环境自检，仅当环境缺失或依赖缺失时才创建/安装（pip 走清华镜像源）
+
+依赖包包括：python-docx Pillow requests mistune
 
 执行下面检查脚本进行运行环境检查和安装
 
