@@ -25,7 +25,8 @@ skills/mddoc/SKILL.md      ← 技能定义（格式规范 + python-docx 代码�
   ↓
 各平台插件层：
   .claude-plugin/plugin.json   → /plugin install 注册 + hooks/SessionStart
-  hooks/session-start          → 会话启动时将 SKILL.md 注入 Claude Code 上下文
+  hooks/hooks.json             → 注册 SessionStart hook（command 指向 hooks/session-start）
+  hooks/session-start          → 会话启动时将 SKILL.md 全文注入 Claude Code 上下文
   .opencode/plugins/mddocx.js  → OpenCode 插件，chat.messages.transform 注入
   .codex-plugin/plugin.json    → Codex 插件注册
   .cursor-plugin/plugin.json   → Cursor 插件注册
@@ -35,6 +36,7 @@ skills/mddoc/SKILL.md      ← 技能定义（格式规范 + python-docx 代码�
 - 四个平台共享同一份 `skills/mddoc/`，各平台 `plugin.json` 指向 `./skills/`
 - SessionStart hook 和 OpenCode transform hook 都在会话启动时将 SKILL.md 全文注入 Agent 上下文，让 Agent 直接按规范生成代码
 - npm 包 `@cliven/mddocx` 包含所有平台配置，`npx @cliven/mddocx` 可直接使用
+- 推荐安装方式为 skills CLI：`npx skills add Trisia/mddocx`（从 GitHub 仓库安装技能到 `~/.claude/skills/mddoc` 等各平台目录），文档（INSTALL.md / README.md）须与此保持一致
 - 虚拟环境位于 `.venv/`，不应提交
 
 ## 常用命令
@@ -103,4 +105,5 @@ for p in doc.paragraphs:
 python skills/mddoc/scripts/md2docx.py skills/mddoc/evals/test-sample.md -o /tmp/test.docx
 
 # evals 定义在 skills/mddoc/evals/evals.json（3 个用例）
+# 每用例 = prompt（交给 agent 的指令） + expected_output（期望产物） + files（输入文件）
 ```

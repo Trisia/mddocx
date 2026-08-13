@@ -17,7 +17,15 @@
 
 ## 安装
 
-npm 全平台通用：
+### npx skills（推荐，全平台技能安装）
+
+```bash
+npx skills add Trisia/mddocx -g -a claude-code codex cursor opencode -y
+```
+
+安装/升级/路径详见 **[INSTALL.md](INSTALL.md)**。
+
+### npm（全平台通用，安装后可免 `npx` 直接用 `mddocx` 命令）
 
 ```bash
 npm install -g @cliven/mddocx
@@ -45,7 +53,9 @@ npx @cliven/mddocx paper.md -o output.docx     # 指定输出
 npx @cliven/mddocx --text "# 标题" -o out.docx # 转换文本
 ```
 
-### Claude Code 中
+### Agent 中使用（npx skills 安装后）
+
+装到哪个 Agent，就在哪个 Agent 内用 `/mddoc` 触发：
 
 ```
 /mddoc paper.md                    # 转换 Markdown 文件
@@ -92,6 +102,12 @@ python skills/mddoc/scripts/md2docx.py --text "# 标题\n\n正文" -o out.docx
 
 ## 升级
 
+### npx skills（npx skills 方式安装的）
+
+```bash
+npx skills update   # 更新所有已安装技能到最新版
+```
+
 ### npm
 
 ```bash
@@ -99,36 +115,7 @@ npm update -g @cliven/mddocx       # 全局安装升级
 npx @cliven/mddocx@latest paper.md # npx 始终使用最新版
 ```
 
-### Claude Code / Codex / Cursor
-
-```bash
-# 插件方式安装的，进入插件目录拉取
-cd ~/.claude/plugins/mddocx && git pull   # Claude Code
-cd ~/.codex/plugins/mddocx && git pull    # Codex
-cd ~/.cursor/plugins/mddocx && git pull   # Cursor
-
-# 或重新克隆安装
-git clone https://github.com/Trisia/mddocx /tmp/mddocx
-cp -rf /tmp/mddocx/skills/mddoc ~/.claude/skills/mddoc
-```
-
-### OpenCode
-
-更新 `opencode.json` 中的插件引用，重启即可自动拉取最新版本。
-
-### Claude PluginHub
-
-Claude Code 内重新安装即更新
-
-```copy
-/plugin install trisia-mddocx@cpd-trisia-mddocx   
-```
-
-### ClawHub（openclaw CLI，非 Claude 插件）
-重新安装拉取最新版
-```bash
-openclaw skills install @trisia/mddoc  
-```
+> 其他平台（Claude Code / Codex / Cursor / OpenCode / Claude PluginHub / ClawHub）升级方式详见 **[INSTALL.md](INSTALL.md)**。
 
 ### Python 依赖
 
