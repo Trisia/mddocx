@@ -57,20 +57,6 @@ npx @cliven/mddocx paper.md -o output.docx     # 指定输出
 npx @cliven/mddocx --text "# 标题" -o out.docx # 转换文本
 ```
 
-
-### 2.3 命令行直接使用
-
-```bash
-# 转换文件（输出到同目录）
-python skills/mddoc/scripts/md2docx.py paper.md
-
-# 指定输出路径
-python skills/mddoc/scripts/md2docx.py paper.md -o output.docx
-
-# 直接转换文本
-python skills/mddoc/scripts/md2docx.py --text "# 标题\n\n正文" -o out.docx
-```
-
 ## 3. 文档格式规范
 
 生成的文档自动应用以下学术排版规范：
@@ -121,10 +107,4 @@ Python 依赖装在专用虚拟环境 `~/.cache/mddocx/venv`（Windows: `%LOCALA
 每次执行时执行环境自检，仅当环境缺失或依赖缺失时才创建/安装（pip 走清华镜像源）
 
 依赖包包括：python-docx Pillow requests mistune
-
-执行下面检查脚本进行运行环境检查和安装
-
-```bash
-python3 skills/mddoc/scripts/setup_env.py   # 幂等,自动补齐缺失依赖
-```
 
