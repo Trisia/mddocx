@@ -46,3 +46,15 @@
 - **引擎单一来源**：插件驱动包内 `skills/mddoc/scripts/md2docx.py`；缺失时工具会报错并提示安装命令。
 - **Python 环境**：优先使用专用虚拟环境 `~/.cache/mddocx/venv`，缺失时自动运行包内 `setup_env.py` 自检（幂等）。
 - **技能位置覆盖**：环境变量 `MDDOCX_SKILL_PATH` 指向技能目录可覆盖包内引擎。
+
+## 动态插件形态（会话级，Cordis 面板显示用）
+
+除组合插件外，同一能力还有一个**动态 Cordis 插件**形态：在某个会话内临时定义并激活，显示在 GUI 的 Cordis 插件面板（侧边栏底部「Cordis Plugin」按钮），模型可直接调用 `mddocx` 工具。动态插件**只在进程内存在**，重启即消失，因此其 host/client 源码以参考文件保存在 **`dsh/mddocx.dynamic.js`**（导出 `host` / `client` 两个函数体字符串）。
+
+任一会话重建方法：
+
+1. 读取 `dsh/mddocx.dynamic.js`，取 `host` / `client` 字符串；
+2. `cordis_define(kind:"new", idPrefix:"mddoc", name:"mddocx", code:{ host, client })`；
+3. `cordis_run` 激活（带 client 半区，首次需在界面批准一次）。
+
+> 动态版与组合版是两种实现：动态版沙箱兼容（无 Node 模块，走 `ctx.shell`/`ctx.fs`，工作目录取 `exec.agent.session.header.cwd`）；组合版（`dsh/mddocx.mjs`）是真实 ESM，用于 npm 包 / 预设行分发。改动时注意两处同步。
