@@ -4,6 +4,7 @@
 [![Codex](https://img.shields.io/badge/Agent-Codex-blue?logo=openai)](https://github.com/openai/codex)
 [![Cursor](https://img.shields.io/badge/Agent-Cursor-6c47ff?logo=cursor)](https://cursor.com)
 [![OpenCode](https://img.shields.io/badge/Agent-OpenCode-teal)](https://opencode.ai)
+[![DSH](https://img.shields.io/badge/Agent-DeepSeek%20Harness-4176e6)](./dsh)
 [![npm](https://img.shields.io/npm/v/@cliven/mddocx?color=red)](https://www.npmjs.com/package/@cliven/mddocx)
 [![Version](https://img.shields.io/github/v/release/Trisia/mddocx)](https://github.com/Trisia/mddocx/releases)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
@@ -33,7 +34,22 @@ npm install -g @cliven/mddocx
 
 Python 依赖由 `setup_env.py` 自动安装，详见下方「依赖」。
 
-> 各平台专属安装/升级说明（Claude Code / Codex / OpenCode / Cursor / Claude PluginHub / ClawHub）详见 **[INSTALL.md](INSTALL.md)**。
+### 1.3 DeepSeek Harness（DSH 原生插件）
+
+```bash
+npm install -g @cliven/mddocx     # ① 安装 npm 包（含转换引擎 + DSH 插件）
+```
+
+在你预设的 `agent.cordis.yml` 末尾追加一行（`name` 用插件文件的绝对路径）：
+
+```yaml
+- id: mddocx
+  name: '<npm root -g 输出>/@cliven/mddocx/dsh/mddocx.mjs'
+```
+
+重新开一个使用该预设的会话，模型即可直接调用 `mddocx` 工具（`text` / `path` / `output` 三参数），详见 **[dsh/README.md](dsh/README.md)**。
+
+> 各平台专属安装/升级说明（Claude Code / Codex / OpenCode / Cursor / DeepSeek Harness / Claude PluginHub / ClawHub）详见 **[INSTALL.md](INSTALL.md)**。
 
 
 ## 2. 使用

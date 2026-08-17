@@ -56,6 +56,25 @@ git clone --depth 1 https://github.com/Trisia/mddocx ~/.claude/plugins/mddocx
 git clone --depth 1 https://github.com/Trisia/mddocx ~/.cursor/plugins/mddocx
 ```
 
+### DeepSeek Harness（DSH）
+
+```bash
+# ① 安装 npm 包（含转换引擎 + DSH 插件）
+npm install -g @cliven/mddocx
+
+# ② 查看插件文件的绝对路径
+echo "$(npm root -g)/@cliven/mddocx/dsh/mddocx.mjs"
+```
+
+在 `~/.dsh/.agent-presets/<你的预设>/agent.cordis.yml` 末尾追加一行（`name` 填入上一步输出的绝对路径）：
+
+```yaml
+- id: mddocx
+  name: '/usr/lib/node_modules/@cliven/mddocx/dsh/mddocx.mjs'
+```
+
+装到哪个预设，那个预设的会话就有原生 `mddocx` 工具；引擎脚本随包分发（插件从自身位置解析），也可用 `MDDOCX_SKILL_PATH` 覆盖。详见 [dsh/README.md](dsh/README.md)。
+
 ### ClawHub（openclaw CLI）
 
 ```bash
@@ -72,6 +91,7 @@ openclaw skills install @trisia/mddoc
 | npm | `npm update -g @cliven/mddocx` |
 | Claude PluginHub | `/plugin install trisia-mddocx@cpd-trisia-mddocx`（重新安装即更新） |
 | ClawHub | `openclaw skills install @trisia/mddoc`（重新安装拉取最新版） |
+| DSH | `npm update -g @cliven/mddocx`（插件绝对路径不变，无需改组合） |
 | 插件（git 安装的） | 进入插件目录 `git pull` 后重启 |
 
 ### Python 依赖

@@ -10,6 +10,7 @@
   "files": [
     "skills/",
     "bin/",
+    "dsh/",
     ".opencode/",
     ".claude-plugin/",
     ".codex-plugin/",
