@@ -1348,6 +1348,18 @@ def override_builtin_heading_styles(doc):
         spacing.set(qn('w:line'), '312')
         spacing.set(qn('w:lineRule'), 'auto')
 
+        # 缩进全部显式置零（twips 与 chars 双维度），
+        # 防止 Word/WPS 对 outlineLvl 段落套用内置标题样式自带的首行缩进
+        ind = OxmlElement('w:ind')
+        for attr in ('w:left', 'w:leftChars', 'w:firstLine', 'w:firstLineChars',
+                     'w:hanging', 'w:hangingChars'):
+            ind.set(qn(attr), '0')
+        ol = pPr.find(qn('w:outlineLvl'))
+        if ol is not None:
+            ol.addprevious(ind)
+        else:
+            pPr.append(ind)
+
 
 # ============================================================
 # Markdown 解析
@@ -1497,6 +1509,8 @@ def _ensure_list_numbering_defs(doc):
 
     参数：
         doc: python-docx Document 对象
+    返回：
+        set: 当前已占用的 numId 集合（含有序 50 / 无序 51）
     """
     # 使用不与 Word 默认模板冲突的 numId 和 abstractNumId
     ORDERED_NUM_ID = '50'
@@ -1507,11 +1521,8 @@ def _ensure_list_numbering_defs(doc):
     numbering_part = doc.part.numbering_part
     numbering_elem = numbering_part._element
 
-    # 检查是否已存在
-    for num in numbering_elem.findall(qn('w:num')):
-        nid = num.get(qn('w:numId'))
-        if nid in (ORDERED_NUM_ID, UNORDERED_NUM_ID):
-            return
+    # 收集当前已占用的 numId
+    used_ids = {num.get(qn('w:numId')) for num in numbering_elem.findall(qn('w:num'))}
 
     # 列表缩进由段落 leftChars 控制，numbering 不再叠加缩进
     BASE_INDENT = 0  # twips
@@ -1574,32 +1585,65 @@ def _ensure_list_numbering_defs(doc):
         abs_unord.append(lvl)
     numbering_elem.append(abs_unord)
 
-    # num 实例：有序列表 → numId=50
-    num_ord = OxmlElement('w:num')
-    num_ord.set(qn('w:numId'), ORDERED_NUM_ID)
-    absRef_ord = OxmlElement('w:abstractNumId')
-    absRef_ord.set(qn('w:val'), ORDERED_ABSTRACT_ID)
-    num_ord.append(absRef_ord)
-    numbering_elem.append(num_ord)
+    # num 实例：有序列表 → numId=50（仅当不存在时注入）
+    if ORDERED_NUM_ID not in used_ids:
+        num_ord = OxmlElement('w:num')
+        num_ord.set(qn('w:numId'), ORDERED_NUM_ID)
+        absRef_ord = OxmlElement('w:abstractNumId')
+        absRef_ord.set(qn('w:val'), ORDERED_ABSTRACT_ID)
+        num_ord.append(absRef_ord)
+        numbering_elem.append(num_ord)
+        used_ids.add(ORDERED_NUM_ID)
 
-    # num 实例：无序列表 → numId=51
-    num_unord = OxmlElement('w:num')
-    num_unord.set(qn('w:numId'), UNORDERED_NUM_ID)
-    absRef_unord = OxmlElement('w:abstractNumId')
-    absRef_unord.set(qn('w:val'), UNORDERED_ABSTRACT_ID)
-    num_unord.append(absRef_unord)
-    numbering_elem.append(num_unord)
+    # num 实例：无序列表 → numId=51（仅当不存在时注入）
+    if UNORDERED_NUM_ID not in used_ids:
+        num_unord = OxmlElement('w:num')
+        num_unord.set(qn('w:numId'), UNORDERED_NUM_ID)
+        absRef_unord = OxmlElement('w:abstractNumId')
+        absRef_unord.set(qn('w:val'), UNORDERED_ABSTRACT_ID)
+        num_unord.append(absRef_unord)
+        numbering_elem.append(num_unord)
+        used_ids.add(UNORDERED_NUM_ID)
+
+    return used_ids
 
 
-def _set_list_num_pr(paragraph, ordered=False, level=0):
+def _new_list_num_id(numbering_elem, abstract_id, used_ids):
+    """为列表块创建独立的 w:num 实例并返回新的 numId。
+
+    有序列表被其他内容（正文段落等）打断后需重新从 1 编号，
+    因此每个有序列表块使用独立 numId（同一 abstractNum 的不同
+    实例各自独立计数），而不再所有列表共享 numId=50。
+
+    参数：
+        numbering_elem: numbering.xml 根元素
+        abstract_id: 引用的 abstractNumId（如 '50'）
+        used_ids: 已占用 numId 集合，新分配的 numId 会加入其中
+    返回：
+        str: 新分配的 numId
+    """
+    nid = 52
+    while str(nid) in used_ids:
+        nid += 1
+    nid_str = str(nid)
+    used_ids.add(nid_str)
+    num = OxmlElement('w:num')
+    num.set(qn('w:numId'), nid_str)
+    abs_ref = OxmlElement('w:abstractNumId')
+    abs_ref.set(qn('w:val'), abstract_id)
+    num.append(abs_ref)
+    numbering_elem.append(num)
+    return nid_str
+
+
+def _set_list_num_pr(paragraph, num_id, level=0):
     """设置段落的 Word 原生列表编号属性 (w:numPr)
 
     参数：
         paragraph: python-docx Paragraph 对象
-        ordered: True=编号列表(1,2,3...), False=项目符号(•)
+        num_id: 引用的 numId（有序列表为每块独立实例，无序固定 '51'）
         level: 列表嵌套层级（0=顶层）
     """
-    num_id = '50' if ordered else '51'
     pPr = paragraph._element.get_or_add_pPr()
     numPr = OxmlElement('w:numPr')
     ilvl = OxmlElement('w:ilvl')
@@ -1611,15 +1655,25 @@ def _set_list_num_pr(paragraph, ordered=False, level=0):
     pPr.append(numPr)
 
 
-def _render_list(doc, node, depth=0):
+def _render_list(doc, node, depth=0, used_ids=None):
     """渲染 Word 原生列表（有序/无序），支持多级嵌套和富文本 inline
+
+    每个有序列表块分配独立 numId，被正文打断后重新从 1 编号；
+    无序列表共享 numId='51'（项目符号无需重置）。
 
     参数：
         doc: python-docx Document 对象
         node: mistune list AST 节点
         depth: 列表嵌套层级（0=顶层）
+        used_ids: 已占用 numId 集合（来自 _ensure_list_numbering_defs）
     """
     ordered = node.get('attrs', {}).get('ordered', False) if 'attrs' in node else node.get('ordered', False)
+
+    if ordered:
+        # 每个有序列表块独立 numId，保证打断后重新编号
+        num_id = _new_list_num_id(doc.part.numbering_part._element, '50', used_ids)
+    else:
+        num_id = '51'
 
     for item in node.get('children', []):
         if item['type'] != 'list_item':
@@ -1632,7 +1686,7 @@ def _render_list(doc, node, depth=0):
         # 列表段前缩进：每级 2 字符（通过 leftChars），段落本身无首行缩进
         _set_paragraph_left_chars(p, 2 * (depth + 1))
 
-        _set_list_num_pr(p, ordered=ordered, level=depth)
+        _set_list_num_pr(p, num_id, level=depth)
 
         for child in item.get('children', []):
             if child['type'] == 'block_text':
@@ -1641,7 +1695,7 @@ def _render_list(doc, node, depth=0):
                 walk_inline(p, child.get('children', []))
             elif child['type'] == 'list':
                 # 嵌套子列表：递归渲染
-                _render_list(doc, child, depth=depth + 1)
+                _render_list(doc, child, depth=depth + 1, used_ids=used_ids)
 
 
 def _render_table(doc, node, tab_counter, chapter_path, has_chapter, caption=''):
@@ -1883,7 +1937,7 @@ def generate_docx(ast, output_path, title_text=None):
     set_run_font(r3, '宋体', size_pt=10.5)
 
     # --- 列表编号定义 ---
-    _ensure_list_numbering_defs(doc)
+    used_ids = _ensure_list_numbering_defs(doc)
 
     # --- 计数器 ---
     chapter_path = [1]  # 一级标题序号
@@ -1932,7 +1986,12 @@ def generate_docx(ast, output_path, title_text=None):
                 elif level == 2:
                     p = doc.add_paragraph()
                     set_outline_level(p, 2)
-                    p.paragraph_format.first_line_indent = Pt(0)
+                    # 顶格：段落级显式清零首行/左侧缩进（twips + chars 双维度）
+                    ind = OxmlElement('w:ind')
+                    for attr in ('w:left', 'w:leftChars', 'w:firstLine',
+                                 'w:firstLineChars', 'w:hanging', 'w:hangingChars'):
+                        ind.set(qn(attr), '0')
+                    p._element.get_or_add_pPr().insert(0, ind)
                     run = p.add_run(text)
                     set_run_font(run, '黑体', size_pt=14, bold=False)
                 elif level == 3:
@@ -2020,7 +2079,7 @@ def generate_docx(ast, output_path, title_text=None):
             pending_table_caption = None
 
         elif t == 'list':
-            _render_list(doc, node)
+            _render_list(doc, node, used_ids=used_ids)
             pending_table_caption = None
 
         elif t == 'block_math':

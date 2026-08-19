@@ -152,11 +152,12 @@ add_empty(doc)
 ### 二级标题（`##`）
 
 四号黑体(14pt)、**不加粗**、顶格(无缩进)、outline_level=2。上下不空行。
+顶格须清除 firstLine 与 firstLineChars 两种缩进（并确保标题样式无缩进），否则 Word/WPS 会套用 2 字符首行缩进。
 
 ```python
 p = doc.add_paragraph()
 set_outline(p, 2)
-p.paragraph_format.first_line_indent = Pt(0)
+set_first_line_indent_chars(p, 0)  # 顶格：清除 firstLine 与 firstLineChars
 run = p.add_run(text)
 set_cn_font(run, '黑体', size_pt=14, bold=False)
 ```
@@ -325,8 +326,15 @@ set_cn_font(r2, '黑体', size_pt=9)
 使用 Word 原生编号/项目符号（`w:numPr` XML），支持富文本 inline 和多级嵌套。列表段落遵守正文格式（首行缩进 Pt(21)、1.3 倍行距）。
 
 ```python
-# 有序列表 — numId=50, 多级格式: 1. → a) → i.
-# 无序列表 — numId=51, 多级符号: • → ◦ → ▪
+# 列表编号定义（生成文档时需在 numbering.xml 中注入抽象编号）
+used_ids = _ensure_list_numbering_defs(doc)  # 定义 numId=50(有序) 和 numId=51(无序)，各 3 级
+# 有序列表 — 每块独立 numId，多级格式: 1. → a) → i.
+# 无序列表 — numId=51，多级符号: • → ◦ → ▪
+# 每个有序列表块用 _new_list_num_id() 分配独立 numId，
+# 被正文打断后重新从 1 编号（共享 numId=50 会导致 Word 持续递增）
+num_id = '51'
+if ordered:
+    num_id = _new_list_num_id(doc.part.numbering_part._element, '50', used_ids)
 for item in list_node['children']:
     p = doc.add_paragraph()
     p.paragraph_format.first_line_indent = Pt(21)  # 同正文
@@ -334,18 +342,15 @@ for item in list_node['children']:
     # 设置 Word 原生编号
     numPr = OxmlElement('w:numPr')
     ilvl = OxmlElement('w:ilvl'); ilvl.set(qn('w:val'), str(depth))
-    numId = OxmlElement('w:numId'); numId.set(qn('w:val'), '50')  # 50=有序, 51=无序
+    numId = OxmlElement('w:numId'); numId.set(qn('w:val'), num_id)
     numPr.append(ilvl); numPr.append(numId)
     p._element.get_or_add_pPr().append(numPr)
     # walk_inline 渲染富文本（支持 **加粗**、*斜体*、$公式$）
     walk_inline(p, item['children'][0]['children'], '宋体', size_pt=10.5)
-    # 嵌套子列表：递归调用 render_list(doc, child, depth+1)
-
-# 列表编号定义（生成文档时需在 numbering.xml 中注入抽象编号）
-_ensure_list_numbering_defs(doc)  # 定义 numId=50(有序) 和 numId=51(无序)，各 3 级
+    # 嵌套子列表：递归调用 render_list(doc, child, depth+1, used_ids)
 ```
 
-列表编号自动跨页连续（同一 `numId` 的段落由 Word 维护编号序列）。
+每个有序列表块使用独立 `numId`（同一 abstractNum 的不同实例各自从 1 计数），被打断后重新编号；列表编号自动跨页连续。
 
 ### 内联格式（加粗、斜体、行内公式等）
 
